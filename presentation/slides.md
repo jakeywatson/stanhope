@@ -68,10 +68,24 @@ Plan for the next ~25 min:
 </div>
 
 ---
-layout: two-cols
----
 
 # The T-maze task
+
+<div class="flex justify-center pt-2">
+
+```mermaid {scale: 0.7}
+graph TD
+  S[Start] -->|a1| Safe
+  S -->|a2| Risky
+  Safe[Safe arm<br/>+small reward<br/>always]
+  Risky[Risky arm<br/>+large w.p. p<br/>-no-reward w.p. 1-p]
+```
+
+</div>
+
+<div class="grid grid-cols-2 gap-10 pt-4 max-w-5xl mx-auto text-sm">
+
+<div>
 
 <v-clicks>
 
@@ -83,27 +97,21 @@ layout: two-cols
 
 </v-clicks>
 
-<div v-click class="pt-6 text-sm opacity-80">
+</div>
+
+<div class="opacity-80">
+
+<div v-click>
 
 The agent does not know $p$. It must choose between exploiting what it knows (safe) and learning what it doesn't (risky) — without an explicit exploration bonus.
 
 </div>
 
-::right::
-
-<div class="flex flex-col items-center">
-
-```mermaid {scale: 0.8}
-graph TD
-  S[Start] -->|a1| Safe
-  S -->|a2| Risky
-  Safe[Safe arm<br/>+small reward<br/>always]
-  Risky[Risky arm<br/>+large w.p. p<br/>-no-reward w.p. 1-p]
-```
-
-<div class="pt-4 text-sm opacity-75 px-4">
+<div class="pt-3" v-click>
 
 **Why this task?** It isolates the learning problem. No hidden context, no partial observability — the only uncertainty is about $p$, a parameter of the observation model.
+
+</div>
 
 </div>
 
@@ -372,7 +380,7 @@ p(\boldsymbol\theta \mid \mathcal{D}) \;\propto\; \text{Cat}(\mathcal{D}\mid\bol
 \;=\; \text{Dir}\!\left(\boldsymbol\alpha + \mathbf{n}\right)
 $$
 
-— **conjugate**. Update rule: observe $o$ in state $s$, then $\alpha_{o,s} \mathrel{+}= 1$.
+— **conjugate**. On observing $o$ in state $s$, increment $\alpha_{o,s}$ by one.
 
 <div class="pt-3">
 
@@ -383,7 +391,7 @@ $$
 \mathbb{E}[\ln \theta_i] = \psi(\alpha_i) - \psi(\alpha_0)
 $$
 
-$\psi$ = digamma, $\alpha_0 = \sum_i \alpha_i$.
+with $\psi$ the digamma function and $\alpha_0 = \sum_i \alpha_i$.
 
 The second identity is what makes **novelty** computable in closed form — no sampling, no amortiser. You evaluate digammas at integer counts.
 
@@ -889,7 +897,7 @@ Two perception stacks, same ceiling. Both were discriminative layers; both broke
 
 </div>
 
-<div class="grid grid-cols-2 gap-8 pt-3 text-sm">
+<div class="grid grid-cols-2 gap-8 pt-2 text-sm">
 
 <div class="border-l-4 border-slate-400 pl-4">
 
@@ -914,13 +922,13 @@ Two perception stacks, same ceiling. Both were discriminative layers; both broke
 
 </div>
 
-<div class="pt-3 text-xs opacity-75">
+<div class="pt-2 text-xs opacity-75">
 
 Stanhope's Real World Model is pitched at exactly this layer — adaptive, uncertainty-aware behaviour on small autonomous platforms, trialled in drone & robotics partnerships. Frazer-Nash's SENTINEL (RL for sensor management) is the same problem shape; active inference derives it from one variational objective instead of a hand-engineered reward.
 
 </div>
 
-<div class="pt-3 text-sm font-semibold">
+<div class="pt-2 text-sm font-semibold">
 The offering: I've shipped the perception pipeline that sits <em>underneath</em> a Stanhope-style agent on a defence UAS — twice. What I came here for is the agent on top.
 </div>
 

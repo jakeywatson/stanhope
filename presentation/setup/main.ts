@@ -9,15 +9,18 @@ import { showGotoDialog, showOverview } from '@slidev/client/state/index.ts'
 export default defineAppSetup(() => {
   if (typeof document === 'undefined') return
 
-  // Hide the Goto-dialog autocomplete list while the dialog is closed.
-  // Slidev v0.49.29 keeps the parent #slidev-goto-dialog in DOM (offset
-  // offscreen with class `-top-20`), but its autocomplete-list child
-  // remains positioned relative and leaks back into the viewport as a
-  // persistent right-side strip of slide titles. Scope the hide by the
-  // offscreen class so the list only appears when the user opens goto.
+  // Slidev v0.49.29 ships Goto.vue with `v-if="result.length > 0"` on the
+  // autocomplete list. Fuse.js v7 returns *every* item for an empty query,
+  // so the list is mounted at app start and sits as a persistent strip of
+  // slide titles leaking past the offscreen dialog. Hide it by default and
+  // only reveal it when the parent actually has the open-state `top-5`
+  // class. Also relocate the dialog to the left edge and give it a max
+  // width so it never overlaps slide content.
   const style = document.createElement('style')
   style.textContent = `
-    #slidev-goto-dialog.-top-20 .autocomplete-list { display: none !important; }
+    #slidev-goto-dialog { right: auto !important; left: 1.25rem !important; max-width: 18rem !important; width: 18rem !important; min-width: 0 !important; }
+    #slidev-goto-dialog .autocomplete-list { display: none !important; }
+    #slidev-goto-dialog.top-5 .autocomplete-list { display: block !important; }
   `
   document.head.appendChild(style)
 
