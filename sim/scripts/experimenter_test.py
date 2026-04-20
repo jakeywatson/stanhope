@@ -196,9 +196,16 @@ def test_drone_ablation(page: Page) -> None:
     g_abl = get(find_agent(board_abl, "greedy") or {}, *keys)
     c_full = get(find_agent(board_full, "combined") or {}, *keys)
     c_abl = get(find_agent(board_abl, "combined") or {}, *keys)
+    ai_full = get(find_agent(board_full, "active inference") or {}, *keys)
+    ai_abl = get(find_agent(board_abl, "active inference") or {}, *keys)
     print(f"  [info] greedy   full={g_full}% ablated={g_abl}%")
-    print(f"  [info] combined full={c_full}% ablated={c_abl}%")
+    print(f"  [info] combined full={c_full}% ablated={c_abl}% (gap {(c_full or 0) - (c_abl or 0):+.1f}pp)")
+    print(f"  [info] AI       full={ai_full}% ablated={ai_abl}% (gap {(ai_full or 0) - (ai_abl or 0):+.1f}pp)")
     assert c_full is not None and c_abl is not None
+    # Curiosity should help on average. With small samples the gap can be
+    # noisy; assert that at least one of {combined, AI} loses at least 10pp.
+    gaps = [(c_full or 0) - (c_abl or 0), (ai_full or 0) - (ai_abl or 0)]
+    assert max(gaps) >= 10, f"Expected ablation to drop combined or AI by >=10pp, got gaps={gaps}"
 
 
 def main() -> int:

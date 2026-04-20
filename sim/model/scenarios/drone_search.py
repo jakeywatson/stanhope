@@ -690,7 +690,9 @@ class DroneSearchScenario:
             believed_acc = dirichlet_expected(self.disc_conc[tz])[0]
             if believed_acc >= DISC_THRESHOLD:
                 nov = self._disc_param_info_gain(tz)
-            ext = float(self.target_belief[idx]) * 2.0
+            # ext stays 0: scanning is purely epistemic. The only true reward
+            # action is CONFIRM. Leaking belief mass into scan extrinsic would
+            # mask the contribution of the curiosity terms during ablation.
 
         elif wp['type'] == WP_EXPLORE:
             new_fov = self._fov_cells(tx, ty, tz)

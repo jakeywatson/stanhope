@@ -262,7 +262,9 @@ $$-\mathbb{E}_{q(o\mid\pi)}\!\left[\ln p(o \mid C)\right]$$
 "Do I expect to see preferred outcomes?"
 
 <div class="pt-2">
+
 Drives **exploitation**. Purely reward-seeking — this is the only term a greedy RL agent optimises.
+
 </div>
 </div>
 
@@ -274,7 +276,9 @@ $$-\mathbb{E}_{q}[\,D_{\text{KL}}\!\left[q(s\mid o)\,\|\,q(s)\right]\,]$$
 "How much does this observation shift my beliefs about hidden state?"
 
 <div class="pt-2">
+
 Drives **hidden-state exploration**. Useful when the task has a cue revealing context — drives the agent toward informative observations.
+
 </div>
 </div>
 
@@ -286,7 +290,9 @@ $$-\mathbb{E}_{q}[\,D_{\text{KL}}\!\left[q(\theta\mid s,o)\,\|\,q(\theta)\right]
 "How much does this observation teach me about model parameters?"
 
 <div class="pt-2">
+
 Drives **parameter exploration**. Collapses toward zero as beliefs about $\theta$ concentrate — self-terminating curiosity.
+
 </div>
 </div>
 
@@ -398,10 +404,10 @@ Same `.py` files run locally for validation; the sim matches paper outputs.
 <iframe
   src="https://jakeywatson.github.io/stanhope/sim/"
   class="w-full rounded-lg shadow-xl"
-  style="height: 60vh; border: 1px solid rgba(255,255,255,0.1);"
+  style="height: 52vh; border: 1px solid rgba(255,255,255,0.1);"
 ></iframe>
 
-<div class="absolute bottom-4 right-8 text-xs opacity-60">
+<div class="pt-2 text-xs opacity-60 text-center">
 Switch agent in the top-right · controls in the side panel
 </div>
 
@@ -476,10 +482,12 @@ None of these are fatal — they're the hinges for where the field has gone sinc
 </div>
 
 ---
-layout: two-cols
----
 
 # Extension 1 · grid-maze
+
+<div class="grid grid-cols-2 gap-8 pt-4">
+
+<div>
 
 - 10×10 grid, fog-of-war observation model
 - Goal hidden at unknown cell
@@ -493,9 +501,8 @@ Shows the same mechanism extends to **real spatial POMDPs**, not just the 3-stat
 
 </div>
 
-::right::
-
-<div class="pl-6">
+</div>
+<div>
 
 **Why this matters for Stanhope**
 
@@ -504,12 +511,15 @@ Spatial navigation under partial observability is the default, not the exception
 In the sim: yes, qualitatively. The novelty term decays, coverage increases, path cost is bounded. But — see prior slide — the combinatorics start biting at $\tau > 2$.
 
 </div>
+</div>
 
----
-layout: two-cols
 ---
 
 # Extension 2 · drone search
+
+<div class="grid grid-cols-2 gap-8 pt-4">
+
+<div>
 
 - 3D grid world with obstacles
 - Drone has a camera frustum — partial FoV
@@ -524,9 +534,8 @@ Salience term chooses viewpoints that *maximally reduce uncertainty* over target
 
 </div>
 
-::right::
-
-<div class="pl-6">
+</div>
+<div>
 
 **Why this matters**
 
@@ -534,6 +543,7 @@ This is closer to what a perception-led autonomy system actually does. It refram
 
 The caveat is honest: I built this as a didactic extension in a discrete world. The combinatorial blow-up from the prior slide is real — continuous motion + high-dim observations need amortised policy posteriors, not exhaustive EFE sums.
 
+</div>
 </div>
 
 ---

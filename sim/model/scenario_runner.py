@@ -93,10 +93,11 @@ class ScenarioRunner:
             reward_label = 'Reward / Trial'
 
         # Snapshot original agent weights so the global AGENTS registry can be
-        # restored after force_extrinsic_only mutations.
+        # restored after force_extrinsic_only mutations. We also snapshot beta
+        # because the ablation sharpens it to greedy levels (see below).
         from agents import AGENTS
         original_weights = {
-            name: (a.w_salience, a.w_novelty) for name, a in AGENTS.items()
+            name: (a.w_salience, a.w_novelty, a.beta) for name, a in AGENTS.items()
         }
 
         try:
@@ -126,6 +127,12 @@ class ScenarioRunner:
                         if active_agent is not None:
                             active_agent.w_salience = 0.0
                             active_agent.w_novelty = 0.0
+                            # Also sharpen the policy. Without this, soft beta
+                            # over flat EFE values produces near-random action
+                            # selection that the waypoint dispatcher rescues,
+                            # masking the loss of curiosity. Greedy uses 0.125.
+                            if active_agent.name not in ('greedy', 'random'):
+                                active_agent.beta = 0.125
                     if hasattr(self.scenario, 'run_episode_summary'):
                         summary = self.scenario.run_episode_summary(n_steps)
                     else:
@@ -160,10 +167,11 @@ class ScenarioRunner:
                 'agents': agents,
             }
         finally:
-            for name, (sal, nov) in original_weights.items():
+            for name, (sal, nov, beta) in original_weights.items():
                 if name in AGENTS:
                     AGENTS[name].w_salience = sal
                     AGENTS[name].w_novelty = nov
+                    AGENTS[name].beta = beta
             np.random.set_state(next_rng_state)
 
     def _summarize_episode(self, results: list[dict]) -> dict:

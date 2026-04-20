@@ -109,10 +109,10 @@ export class ExperimentDashboard {
         <div class="slider-row" style="margin-top:0.6rem;">
           <label for="exp-ablation">EFE ablation</label>
           <input type="checkbox" id="exp-ablation">
-          <span class="slider-val">w_sal=w_nov=0</span>
+          <span class="slider-val">w_sal=w_nov=0, β→0.125</span>
         </div>
         <div class="info-text" style="margin-top:0.2rem;">
-          Forces every agent to extrinsic-only planning (curiosity terms off). Run once with this off, clear results, then run again with it on to compare.
+          Strips curiosity (w_salience=w_novelty=0) and sharpens the policy to greedy (β=0.125). Without sharpening, soft-β policy over flat EFE values is functionally random and the waypoint dispatcher rescues it. Run once off, clear results, then on, to see combined / AI / AL drop ~20–30pp while greedy and random stay flat.
         </div>`
       : '';
     return `
