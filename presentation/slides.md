@@ -245,7 +245,9 @@ G(\pi, \tau) \;=\;
 $$
 
 <div class="pt-4 text-sm opacity-80">
-The minus signs matter: minimising $G$ means <b>low expected cost</b> <i>and</i> <b>high expected information gain</b>. Exploration is not a bonus grafted on — it drops out of the same objective as reward-seeking.
+
+The minus signs matter: minimising $G$ means **low expected cost** *and* **high expected information gain**. Exploration is not a bonus grafted on — it drops out of the same objective as reward-seeking.
+
 </div>
 
 ---
@@ -389,27 +391,53 @@ These four choices signal you engaged with the paper as an implementer, not a re
 -->
 
 ---
-layout: center
----
 
 # Live reproduction
 
-<div class="pt-4 pb-4">
+<div class="grid grid-cols-5 gap-6 pt-2">
 
-Python (NumPy) model running in the browser via **Pyodide**.<br/>
-Same `.py` files run locally for validation; the sim matches paper outputs.
+<div class="col-span-3">
+
+<img src="/sim-tmaze.png" class="rounded-lg shadow-xl" style="border: 1px solid rgba(255,255,255,0.1);" />
+
+</div>
+<div class="col-span-2 text-sm">
+
+Python (NumPy) model running in the browser via **Pyodide**. Same `.py` files run locally for validation.
+
+<div class="pt-4">
+
+**What maps to what on screen**
+
+- **β (precision)** → policy softmax temperature
+- **Extrinsic · Salience · Novelty** → the three EFE weights $w_{\text{ext}}, w_{\text{sal}}, w_{\text{nov}}$
+- **Sensor model** panel → the Dirichlet concentrations $\boldsymbol{\alpha}$, updating live
+- Agent dropdown toggles the four regimes from the paper
 
 </div>
 
-<iframe
-  src="https://jakeywatson.github.io/stanhope/sim/"
-  class="w-full rounded-lg shadow-xl"
-  style="height: 52vh; border: 1px solid rgba(255,255,255,0.1);"
-></iframe>
+<div class="pt-4 text-center">
 
-<div class="pt-2 text-xs opacity-60 text-center">
-Switch agent in the top-right · controls in the side panel
+<a href="https://jakeywatson.github.io/stanhope/sim/" target="_blank" class="inline-block px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-base no-underline shadow-lg">
+Open the sim →
+</a>
+
+<div class="pt-2 text-xs opacity-50">jakeywatson.github.io/stanhope/sim</div>
+
 </div>
+
+</div>
+
+</div>
+
+<!--
+Demo points to hit live:
+1. Active-learning agent: show early risky-arm sampling, novelty term high
+2. Watch concentration parameters grow, novelty decay
+3. Switch to random (β=2³): exploration never decays
+4. Switch to greedy: never discovers risky arm even when it's good
+5. Resist live-tweaking — stick to the script
+-->
 
 <!--
 Demo points to hit live:
@@ -545,6 +573,157 @@ The caveat is honest: I built this as a didactic extension in a discrete world. 
 
 </div>
 </div>
+
+---
+
+# Ablation · isolating the curiosity contribution
+
+<div class="text-sm opacity-80 pb-2">
+
+Toggle strips curiosity: $w_{\text{sal}} = w_{\text{nov}} = 0$ and collapses $\beta \to 0.125$ (greedy-precise). "If you only chased the extrinsic signal, how well would you do?"
+
+</div>
+
+<div class="pt-1 space-y-2.5 text-sm">
+
+<div class="flex items-center gap-3">
+  <div class="w-40">combined</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:88%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">88%</div>
+  </div>
+  <div class="w-6 text-center opacity-50">→</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:68%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">68%</div>
+  </div>
+  <div class="w-20 text-rose-300 font-mono">−20pp</div>
+</div>
+
+<div class="flex items-center gap-3">
+  <div class="w-40">active_inference</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:92%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">92%</div>
+  </div>
+  <div class="w-6 text-center opacity-50">→</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:66%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">66%</div>
+  </div>
+  <div class="w-20 text-rose-300 font-mono">−26pp</div>
+</div>
+
+<div class="flex items-center gap-3">
+  <div class="w-40">active_learning</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:89%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">89%</div>
+  </div>
+  <div class="w-6 text-center opacity-50">→</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:57%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">57%</div>
+  </div>
+  <div class="w-20 text-rose-300 font-mono">−32pp</div>
+</div>
+
+<div class="flex items-center gap-3 opacity-70">
+  <div class="w-40">greedy <span class="text-xs opacity-60">(control)</span></div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:62%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">62%</div>
+  </div>
+  <div class="w-6 text-center opacity-50">≈</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:67%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">67%</div>
+  </div>
+  <div class="w-20 opacity-60 font-mono">≈ 0</div>
+</div>
+
+<div class="flex items-center gap-3 opacity-70">
+  <div class="w-40">random <span class="text-xs opacity-60">(control)</span></div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:80%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">80%</div>
+  </div>
+  <div class="w-6 text-center opacity-50">≈</div>
+  <div class="flex-1 h-5 bg-white/5 rounded relative">
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:85%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">85%</div>
+  </div>
+  <div class="w-20 opacity-60 font-mono">≈ 0</div>
+</div>
+
+</div>
+
+<div class="pt-4 grid grid-cols-12 gap-4 text-xs opacity-75">
+<div class="col-span-4"><b>Full EFE</b> · paper-matched weights</div>
+<div class="col-span-4 text-center"><b>Ablated</b> · extrinsic only, greedy β</div>
+<div class="col-span-4 text-right">target = confirm correct object (6 distractors)</div>
+</div>
+
+<div class="pt-3 text-sm opacity-85">
+Greedy / random are unchanged by the toggle — <b>control</b>: the switch isolates curiosity rather than just degrading policy. That random still scores 80% reveals the waypoint dispatcher itself encodes active-inference structure (Scan→z=2, Confirm→z=1, Explore→frontier). <b>Curiosity earns the last 10–30pp.</b>
+</div>
+
+<!--
+Key number to anchor: 20–32pp drop for the three curiosity agents, flat for the two controls.
+If asked "why is AL's gap biggest?" — AL is novelty-only. Novelty calibrates the sensor model (disc_conc[z]); without it, the agent never validates that z=2 is the discriminating altitude. With small episode counts the variance is high — AL depends on iteratively-built sensor knowledge that never materialises under ablation.
+-->
+
+---
+
+# What each gap tells us
+
+<div class="grid grid-cols-3 gap-4 pt-1 text-xs">
+
+<div class="p-3 rounded-lg border-l-4 border-rose-400 bg-white/5">
+
+### combined · −20pp
+**Full EFE:** surveys, Scans top candidates twice at z=2, Confirms at z=1.
+
+**Ablated:** only signal is Confirm extrinsic ($-10$ until $p > 0.55$). Agent wanders until accidental sightings push a belief past threshold — sometimes commits to a distractor.
+
+<div class="pt-1.5 opacity-75">Cost of giving up deliberate information-gathering.</div>
+
+</div>
+
+<div class="p-3 rounded-lg border-l-4 border-rose-400 bg-white/5">
+
+### active_inference · −26pp
+AI is **salience-only** — no novelty.
+
+Salience drives the Scan→Confirm two-step tailor-made for discrimination. Remove it → no mechanism that says *"go look closer at object X"*.
+
+<div class="pt-1.5 opacity-75">Single-component design brittles under ablation — combined's β-shaping gives it more to fall back on.</div>
+
+</div>
+
+<div class="p-3 rounded-lg border-l-4 border-rose-400 bg-white/5">
+
+### active_learning · −32pp
+AL is **novelty-only** — no salience.
+
+Novelty pushes altitude variation to sharpen `disc_conc[z]`. Without it the agent never validates which altitude discriminates.
+
+<div class="pt-1.5 opacity-75">Depends on iteratively-built sensor knowledge that never materialises. Biggest loser in small-batch runs.</div>
+
+</div>
+
+</div>
+
+<div class="pt-4 text-sm">
+
+**One-liner.** A drone *with* curiosity surveys, inspects at the discriminating altitude, then commits. Strip curiosity and — even with greedy-precise exploitation — performance drops 20–32pp, because the agent has no mechanism to *seek* information, only to exploit what passive observation hands it.
+
+</div>
+
+<!--
+Ordering of agents here is intentional: combined → AI → AL, left-to-right, matches the bar chart on the prior slide and also the magnitude of the loss (20 → 26 → 32pp).
+If asked about the greedy/random controls: greedy already had w_sal=w_nov=0 and β=0.125, so the toggle is a no-op for it. Random uses β=8 and the toggle skips it. The ~5pp drift in each is RNG.
+-->
 
 ---
 layout: center
