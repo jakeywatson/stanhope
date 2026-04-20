@@ -9,6 +9,18 @@ import { showGotoDialog, showOverview } from '@slidev/client/state/index.ts'
 export default defineAppSetup(() => {
   if (typeof document === 'undefined') return
 
+  // Hide the Goto-dialog autocomplete list while the dialog is closed.
+  // Slidev v0.49.29 keeps the parent #slidev-goto-dialog in DOM (offset
+  // offscreen with class `-top-20`), but its autocomplete-list child
+  // remains positioned relative and leaks back into the viewport as a
+  // persistent right-side strip of slide titles. Scope the hide by the
+  // offscreen class so the list only appears when the user opens goto.
+  const style = document.createElement('style')
+  style.textContent = `
+    #slidev-goto-dialog.-top-20 .autocomplete-list { display: none !important; }
+  `
+  document.head.appendChild(style)
+
   const isEditable = (el: EventTarget | null): boolean => {
     if (!(el instanceof HTMLElement)) return false
     const tag = el.tagName

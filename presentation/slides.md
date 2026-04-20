@@ -829,9 +829,55 @@ Munin's bet: the cheapest, smallest missile system that can down an FPV drone �
 </div>
 </div>
 
-<div class="pt-5 text-sm opacity-75 max-w-3xl mx-auto">
-Earlier · <b>Frazer-Nash</b> (Sept 2022 – Apr 2024): routing & control for autonomous vehicles — Python / C++ / ROS2 / Gazebo-Unity sim. Rebuilt the vision stack <b>20 → 70+ fps</b> on edge hardware while improving detection accuracy. Led the technical design on a new £235k bid.
+<!--
+If asked "why did you leave Munin?" — it's an excellent applied problem but the ceiling is a better detector; I want to work on the planner above it.
+-->
+
+---
+
+# Before Munin · autonomous UAS at Frazer-Nash
+<div class="pt-2 text-sm opacity-70">Sept 2022 – Apr 2024 · maritime defence · multirotor loitering platform · Python / C++ / ROS2 / Gazebo-Unity</div>
+
+<div class="pt-3 text-sm opacity-80 max-w-4xl mx-auto">
+
+A tactical multirotor analogous to <a href="https://www.stm.com.tr/en/kargu-autonomous-tactical-multi-rotor-attack-uav" target="_blank" class="underline decoration-dotted">STM's Kargu</a> — mini-class, EO/IR, loitering ISR plus precision strike — adapted for maritime defence. Onboard vision, target tracking and navigation on SWaP-constrained hardware, closing the loop in real time.
+
 </div>
+
+<div class="grid grid-cols-2 gap-8 pt-5 text-sm">
+
+<div class="border-l-4 border-slate-400 pl-4">
+
+**The system**
+
+- Detector + tracker → control, tightly coupled
+- Target estimates acted on **immediately** downstream
+- Worked well when observations were clean
+- I rebuilt the vision stack **20 → 70+ fps** on edge hardware while improving detection accuracy
+- Led the technical design on a new **£235k bid**
+
+</div>
+<div class="border-l-4 border-amber-500 pl-4">
+
+**Where it broke**
+
+- Ambiguous scenes — clutter, sun-glint, partial occlusion
+- **Confidence ≠ uncertainty**: the detector was sure when it shouldn't have been
+- No explicit belief over the environment
+- No mechanism to trade off exploration vs exploitation
+- The gap wasn't perception or control — it was the **shared, uncertainty-aware layer** between them
+
+</div>
+
+</div>
+
+<div class="pt-4 text-sm font-semibold opacity-90">
+That missing layer is what drew me to active inference — and to this paper.
+</div>
+
+<!--
+Keep this tight: the hook is the diagnosis, not the bid value. The £235k detail is there if asked "did you own scope as well as code?". Maritime detail lets me answer "what sort of targets?" without over-disclosing. If pressed on Kargu — I'm citing it as the nearest public analogue for the class of system, not the specific programme.
+-->
 
 ---
 
@@ -839,7 +885,7 @@ Earlier · <b>Frazer-Nash</b> (Sept 2022 – Apr 2024): routing & control for au
 
 <div class="text-sm opacity-80 pt-1">
 
-The perception I built is the **discriminative layer**. Everything interesting Stanhope (and this paper) does sits *above* it.
+Two perception stacks, same ceiling. Both were discriminative layers; both broke when confidence stopped meaning *what the system knows*. The layer above them is what Stanhope is building.
 
 </div>
 
@@ -847,12 +893,12 @@ The perception I built is the **discriminative layer**. Everything interesting S
 
 <div class="border-l-4 border-slate-400 pl-4">
 
-**What my pipeline *does***
+**What I shipped — twice**
 
-- Pixels → $\{\text{drone},\ \varnothing\}$ in <1 ms on a $10 SBC
+- Pixels → $\{\text{target},\ \varnothing\}$ in milliseconds on SWaP-tight hardware
 - No posterior — no notion of *"I don't know"*
 - Retrain per domain: clutter, lighting, target drift
-- Greedy tracker: chase the highest-confidence box
+- Greedy downstream: chase the highest-confidence box
 
 </div>
 <div class="border-l-4 border-emerald-400 pl-4">
@@ -875,11 +921,11 @@ Stanhope's Real World Model is pitched at exactly this layer — adaptive, uncer
 </div>
 
 <div class="pt-3 text-sm font-semibold">
-The offering: I've shipped the perception pipeline that sits <em>underneath</em> a Stanhope-style agent on a defence UAS. What I came here for is the agent on top.
+The offering: I've shipped the perception pipeline that sits <em>underneath</em> a Stanhope-style agent on a defence UAS — twice. What I came here for is the agent on top.
 </div>
 
 <!--
-If asked "why did you leave Munin?" — it's an excellent applied problem but the ceiling is a better detector; I want to work on the planner above it. If asked about Frazer-Nash SENTINEL in interview: it's an RL-for-sensor-management system; active inference collapses the same objective to salience + novelty without a separately learned reward model.
+If asked about Frazer-Nash SENTINEL: it's an RL-for-sensor-management system; active inference collapses the same objective to salience + novelty without a separately learned reward model.
 -->
 
 ---
