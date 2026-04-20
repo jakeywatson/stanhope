@@ -790,11 +790,11 @@ class: text-center
 ---
 
 # Drone work at Munin Dynamics
-<div class="pt-2 text-sm opacity-70">Feb — Aug 2025 · camera-guided interceptor (Micro-MANPAD)</div>
+<div class="pt-2 text-sm opacity-70">Feb — Aug 2025 · volunteer engineer · camera-guided micro-interceptor</div>
 
 <div class="pt-3 text-sm opacity-80 max-w-3xl mx-auto">
 
-Munin's bet: the cheapest, smallest missile system that can take out an FPV drone — pocket-sized, scalable to Ukraine-sized threat volumes. My remit was the perception stack on the interceptor itself.
+Munin's bet: the cheapest, smallest missile system that can down an FPV drone — pocket-sized, scalable to Ukraine-level threat volumes. I went in as a volunteer to build the perception stack on the interceptor itself.
 
 </div>
 
@@ -803,7 +803,7 @@ Munin's bet: the cheapest, smallest missile system that can take out an FPV dron
 <div>
 
 **Problem**
-- Detect 7″ quadcopter at 30–350 m
+- Detect a small quadcopter out to **200 m**
 - 150 m/s closing velocity
 - SWaP: <30 mm diameter processing board
 - $250 production BoM
@@ -812,10 +812,10 @@ Munin's bet: the cheapest, smallest missile system that can take out an FPV dron
 <div>
 
 **What I built**
-- Camera / SBC selection against DRI/Johnson criteria
+- Camera / SBC selection against DRI / Johnson criteria
 - FOMO detector, trained on-platform, int8-quantised
-- Capture → detect → track pipeline on a Digi ConnectCore 93
-- Field-test support
+- Capture → detect → track on a Digi ConnectCore 93
+- PyTorch + OpenCV + Docker; field-test support
 
 </div>
 <div>
@@ -830,7 +830,7 @@ Munin's bet: the cheapest, smallest missile system that can take out an FPV dron
 </div>
 
 <div class="pt-5 text-sm opacity-75 max-w-3xl mx-auto">
-Earlier · <b>Frazer-Nash</b> (autonomous-vehicle vision, Dstl-adjacent): rebuilt the perception pipeline 20 → 70+ fps on Jetson and scoped ML safety cases for UGV perception.
+Earlier · <b>Frazer-Nash</b> (Sept 2022 – Apr 2024): routing & control for autonomous vehicles — Python / C++ / ROS2 / Gazebo-Unity sim. Rebuilt the vision stack <b>20 → 70+ fps</b> on edge hardware while improving detection accuracy. Led the technical design on a new £235k bid.
 </div>
 
 ---
