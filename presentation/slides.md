@@ -107,7 +107,57 @@ graph TD
 
 ---
 
-# Figure 2 — the generative model
+# The generative model
+
+<div class="grid grid-cols-2 gap-8 pt-2">
+
+<div>
+
+A **generative** model is a joint distribution that says *how the world produces observations*:
+
+$$
+p(o, s, \theta) \;=\; \underbrace{p(o \mid s, \theta)}_{\text{likelihood}}\;\underbrace{p(s)}_{\text{state prior}}\;\underbrace{p(\theta)}_{\text{parameter prior}}
+$$
+
+Read it as: *"if the world were in state $s$ with sensor parameters $\theta$, this is the distribution over observations I'd expect to see."* It is generative because you can **sample from it** — pick an $s$ and $\theta$, the model tells you what $o$ would result.
+
+<div class="pt-3 text-sm opacity-80">
+
+Contrast with a **discriminative** model like Q-learning or a classifier, which maps observation → decision without representing how data came to be.
+
+</div>
+
+</div>
+<div>
+
+**Why it matters: one model, three jobs.**
+
+<div class="pt-1 text-sm">
+
+1. <span class="text-sky-400 font-bold">Inference.</span> Invert the joint: $p(s \mid o) \propto p(o \mid s)\,p(s)$. Salience needs this.
+
+2. <span class="text-emerald-400 font-bold">Simulation.</span> Roll forward under a policy to get $q(o \mid \pi)$. Extrinsic scores it against preferences.
+
+3. <span class="text-violet-400 font-bold">Meta-inference.</span> Reason about $\theta$ itself — *how much would observing here sharpen my belief about the sensor?* Novelty is a KL on $q(\theta)$.
+
+</div>
+
+<div class="pt-3 text-sm opacity-80">
+
+Model-free RL has none of these — there is no $p(o \mid s, \theta)$ to invert or roll forward, so *there is nowhere for curiosity to live*. This is the asymmetry that defines active inference.
+
+</div>
+
+</div>
+</div>
+
+<!--
+The prose bridge between the T-maze setup and the tensor slide. Key line to drop if asked: "same generative model is used three times — to predict what will be observed, to score information gain, and to evaluate preferred outcomes." One model, three jobs.
+-->
+
+---
+
+# Figure 2 · four pieces of the model
 
 A discrete POMDP with four pieces: $\{A, B, \mathbf{c}, \mathbf{d}\}$
 
@@ -154,7 +204,11 @@ The risky column of $A$ is the only uncertain object in the model. Everything el
 
 ---
 
-# The A-matrix (observation model)
+# The A-matrix · where uncertainty lives
+
+<div class="grid grid-cols-2 gap-8 pt-1">
+
+<div>
 
 $$
 A \;=\;
@@ -167,18 +221,27 @@ o{=}\text{none}   & 0 & 0 & 1-p
 \end{array}
 $$
 
-<div class="pt-4">
+<div class="pt-3 text-sm">
 
 Two deterministic columns (start, safe). One **unknown** column (risky), parametrised by a single scalar $p$.
 
-The agent represents its belief about this column as a **Dirichlet distribution** with concentration parameters $\boldsymbol{\alpha} \in \mathbb{R}^{2}_+$ over $\{\text{large}, \text{none}\}$:
+Belief over the risky column is a **Dirichlet** with concentrations $\boldsymbol{\alpha} \in \mathbb{R}^{2}_+$:
 
 $$
-q(A_{\cdot,\text{risky}}) = \text{Dir}(\boldsymbol{\alpha}), \qquad
-\mathbb{E}[A_{o,\text{risky}}] = \frac{\alpha_o}{\alpha_0}, \ \ \alpha_0 = \textstyle\sum_o \alpha_o
+q(A_{\cdot,\text{risky}}) = \text{Dir}(\boldsymbol{\alpha}), \quad
+\mathbb{E}[A_{o,\text{risky}}] = \frac{\alpha_o}{\alpha_0}
 $$
 
-The paper starts at $\boldsymbol{\alpha} = [1,1]$ — maximum a priori uncertainty about $p$.
+Paper starts at $\boldsymbol{\alpha}{=}[1,1]$ — maximum a priori uncertainty.
+
+</div>
+
+</div>
+<div class="bg-white rounded-lg p-2">
+
+<img src="/beta-sharpening-basic.png" class="w-full" />
+
+</div>
 
 </div>
 
@@ -204,12 +267,20 @@ $$
 \ }
 $$
 
-<div class="pt-4">
+<div class="grid grid-cols-5 gap-6 pt-3">
 
-- $\sigma(\cdot)$ is the softmax — it falls out of the KKT conditions for constrained minimisation over the simplex
-- $\ln A^{\!\top} \tilde o$ has a principled interpretation: **log-evidence** arriving at state $s$
-- This is the forward-backward algorithm in active-inference clothing
+<div class="col-span-3 bg-white rounded-lg p-2">
 
+<img src="/posterior-update.png" class="w-full" />
+
+</div>
+<div class="col-span-2 text-sm">
+
+- $\sigma(\cdot)$ = softmax — falls out of constrained minimisation over the simplex (Lagrange + $\sum q = 1$)
+- $\ln A^{\!\top} \tilde o$ is **log-evidence** arriving at state $s$
+- This is forward-backward in active-inference clothing — a single observation multiplies the prior pointwise and renormalises, exactly like the Kalman update in discrete form
+
+</div>
 </div>
 
 <!--
@@ -254,82 +325,72 @@ The minus signs matter: minimising $G$ means **low expected cost** *and* **high 
 
 # The three terms · what each one <em>buys</em> you
 
-<div class="grid grid-cols-3 gap-6 pt-2 text-sm">
+<div class="bg-white rounded-lg p-2">
+
+<img src="/three-terms-panel.png" class="w-full" style="max-height: 42vh; object-fit: contain;" />
+
+</div>
+
+<div class="grid grid-cols-3 gap-5 pt-1 text-xs">
 
 <div>
 
-### 1 · Extrinsic
-$$-\mathbb{E}_{q(o\mid\pi)}\!\left[\ln p(o \mid C)\right]$$
+**1 · Extrinsic** — exploitation. Scores expected outcomes against preferences $\mathbf{c}$. The only term a greedy RL agent optimises.
 
-"Do I expect to see preferred outcomes?"
-
-<div class="pt-2">
-
-Drives **exploitation**. Purely reward-seeking — this is the only term a greedy RL agent optimises.
-
-</div>
-</div>
-
-<div>
-
-### 2 · Salience
-$$-\mathbb{E}_{q}[\,D_{\text{KL}}\!\left[q(s\mid o)\,\|\,q(s)\right]\,]$$
-
-"How much does this observation shift my beliefs about hidden state?"
-
-<div class="pt-2">
-
-Drives **hidden-state exploration**. Useful when the task has a cue revealing context — drives the agent toward informative observations.
-
-</div>
 </div>
 
 <div>
 
-### 3 · Novelty
-$$-\mathbb{E}_{q}[\,D_{\text{KL}}\!\left[q(\theta\mid s,o)\,\|\,q(\theta)\right]\,]$$
-
-"How much does this observation teach me about model parameters?"
-
-<div class="pt-2">
-
-Drives **parameter exploration**. Collapses toward zero as beliefs about $\theta$ concentrate — self-terminating curiosity.
-
-</div>
-</div>
+**2 · Salience** — state-info gain. KL between belief *after* seeing $o$ and *before*. Vanishes in the bare T-maze (no cue).
 
 </div>
 
-<div class="pt-6 text-sm opacity-75">
-For the bare T-maze (no cue), salience vanishes — $s$ is deterministic given $a$. Novelty is the whole exploration engine.
+<div>
+
+**3 · Novelty** — parameter-info gain. KL on $q(\theta)$. Drives sampling where the sensor is uncertain. **Self-terminating** as $\boldsymbol{\alpha}$ concentrates.
+
+</div>
+
 </div>
 
 ---
 
 # Parameter learning · why Dirichlet
 
-The posterior over the risky column of $A$ is categorical-likelihood × Dirichlet-prior:
+<div class="grid grid-cols-2 gap-6 pt-2">
+
+<div class="text-sm">
+
+Posterior over the risky column is categorical-likelihood × Dirichlet-prior:
 
 $$
 p(\boldsymbol\theta \mid \mathcal{D}) \;\propto\; \text{Cat}(\mathcal{D}\mid\boldsymbol\theta)\,\text{Dir}(\boldsymbol\theta \mid \boldsymbol\alpha)
 \;=\; \text{Dir}\!\left(\boldsymbol\alpha + \mathbf{n}\right)
 $$
 
-— **conjugate**. The update rule is just: observe $o$ in state $s$, then $\alpha_{o,s} \mathrel{+}= 1$.
+— **conjugate**. Update rule: observe $o$ in state $s$, then $\alpha_{o,s} \mathrel{+}= 1$.
 
-<div class="pt-4">
+<div class="pt-3">
 
-Two moments we actually need:
+Two moments we need:
 
 $$
-\mathbb{E}[\theta_i] = \frac{\alpha_i}{\alpha_0}
-\qquad
+\mathbb{E}[\theta_i] = \frac{\alpha_i}{\alpha_0}, \qquad
 \mathbb{E}[\ln \theta_i] = \psi(\alpha_i) - \psi(\alpha_0)
 $$
 
-where $\psi$ is the digamma function and $\alpha_0 = \sum_i \alpha_i$.
+$\psi$ = digamma, $\alpha_0 = \sum_i \alpha_i$.
 
-The second identity is what makes the **novelty term** computable in closed form — without sampling, without a learned amortiser. You evaluate digammas at integer counts. That's it.
+The second identity is what makes **novelty** computable in closed form — no sampling, no amortiser. You evaluate digammas at integer counts.
+
+</div>
+
+</div>
+<div class="bg-white rounded-lg p-2">
+
+<img src="/dirichlet-digamma.png" class="w-full" />
+
+</div>
 
 </div>
 
@@ -347,29 +408,23 @@ $$
 q(\pi) \;=\; \sigma\!\left(-\gamma \cdot G(\pi)\right), \qquad \gamma \sim \Gamma(1, \beta)
 $$
 
-$\gamma$ is **precision** over policies. In the paper it's expected under a Gamma prior with rate $\beta$:
+$\gamma$ is **precision** over policies — expected under a Gamma prior with rate $\beta$. $\beta$ is the lever that separates the paper's four experimental regimes:
 
-<div class="pt-2 text-sm">
+<div class="bg-white rounded-lg p-2 pt-1 mt-2">
 
-| $\beta$ | Behaviour | Mapping to RL |
-|---|---|---|
-| $2^{-3}$ | high precision, near-argmin | greedy / low-temperature softmax |
-| $1$ | standard | usual temperature |
-| $2^{3}$ | low precision, nearly uniform | high-temperature / random |
+<img src="/softmax-temperature.png" class="w-full" />
 
 </div>
 
-<div class="pt-4">
+<div class="pt-3 text-sm opacity-85">
 
-**Why a prior on $\gamma$ at all?** It lets the agent *modulate its own confidence*. When $G(\pi)$ values are close, $\gamma$ naturally shrinks — "I genuinely don't know which is better, so don't commit."
-
-This is the lever that separates the paper's four experimental regimes.
+**Why a prior on $\gamma$ at all?** It lets the agent *modulate its own confidence*. When $G(\pi)$ values are close, $\gamma$ naturally shrinks — *"I genuinely don't know which is better, so don't commit."* The Gamma–Dirichlet pairing is what lets the whole update stay closed-form.
 
 </div>
 
 ---
 
-# Implementation choices
+# Four things the paper doesn't tell you
 
 <div class="text-sm">
 
@@ -392,7 +447,7 @@ These four choices signal you engaged with the paper as an implementer, not a re
 
 ---
 
-# Live reproduction
+# Sim · T-maze end-to-end
 
 <div class="grid grid-cols-5 gap-6 pt-2">
 
