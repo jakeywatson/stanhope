@@ -1,0 +1,29 @@
+# Build artifacts
+node_modules/
+dist/
+.slidev/
+*.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Large binaries / copyrighted PDFs
+*.pdf
+
+# Unrelated .github content (trading project) — keep workflows only
+.github/*
+!.github/workflows
+
+# Interview prep notes (kept local)
+findings.md
+task_plan.md
+progress.md
+chatgpt.md
+sim/findings.md
+sim/task_plan.md
+sim/progress.md

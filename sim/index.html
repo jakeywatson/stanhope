@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Active Inference Explorer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0a0a0f;
+      color: #e0e0e8;
+      overflow: hidden;
+    }
+
+    /* Loading screen */
+    #loading {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: #0a0a0f;
+      z-index: 1000;
+      transition: opacity 0.5s;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    #loading h1 {
+      font-size: 1.8rem; font-weight: 300;
+      letter-spacing: 0.1em; margin-bottom: 2rem;
+      color: #a0a0c0;
+    }
+    #loading .subtitle {
+      font-size: 0.85rem; color: #606080;
+      margin-bottom: 1.5rem;
+    }
+    #progress-bar {
+      width: 300px; height: 3px;
+      background: #1a1a2e; border-radius: 2px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #4a6cf7, #7c3aed);
+      transition: width 0.3s;
+    }
+    #loading-status {
+      margin-top: 1rem; font-size: 0.75rem;
+      color: #505070;
+    }
+
+    /* Main layout */
+    #app {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      grid-template-rows: 48px auto 1fr;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* Top bar */
+    #topbar {
+      grid-column: 1 / -1;
+      display: flex; align-items: center;
+      padding: 0 1rem;
+      background: #0d0d14;
+      border-bottom: 1px solid #1a1a2e;
+      gap: 1.5rem;
+    }
+    #topbar h1 {
+      font-size: 0.9rem; font-weight: 500;
+      letter-spacing: 0.05em; color: #8080a0;
+    }
+    #topbar select, #topbar button {
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      color: #c0c0d8;
+      padding: 0.3rem 0.7rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    #topbar button:hover { background: #1e1e3a; }
+    #topbar select:disabled, #topbar button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    #topbar .spacer { flex: 1; }
+    #topbar .trial-counter {
+      font-size: 0.8rem; color: #606080;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 3D viewport */
+    #viewport {
+      position: relative;
+      overflow: hidden;
+    }
+    #viewport canvas { display: block; }
+
+    /* Side panel */
+    #sidepanel {
+      background: #0d0d14;
+      border-left: 1px solid #1a1a2e;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex; flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel-section {
+      background: #11111e;
+      border: 1px solid #1a1a2e;
+      border-radius: 6px;
+      padding: 0.8rem;
+    }
+    .panel-section h3 {
+      font-size: 0.7rem; font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #606080;
+      margin-bottom: 0.6rem;
+    }
+
+    /* Belief bars */
+    .belief-bar {
+      display: flex; align-items: center;
+      margin-bottom: 0.4rem; gap: 0.5rem;
+    }
+    .belief-bar label {
+      font-size: 0.7rem; color: #8080a0;
+      width: 80px; text-align: right;
+    }
+    .belief-bar .bar-track {
+      flex: 1; height: 14px;
+      background: #0a0a14;
+      border-radius: 3px; overflow: hidden;
+    }
+    .belief-bar .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    .belief-bar .bar-value {
+      font-size: 0.7rem; color: #a0a0c0;
+      width: 36px; font-variant-numeric: tabular-nums;
+    }
+
+    /* EFE decomposition */
+    .efe-row {
+      display: flex; align-items: center;
+      margin-bottom: 0.3rem; gap: 0.4rem;
+    }
+    .efe-row label {
+      font-size: 0.65rem; color: #8080a0;
+      width: 70px; text-align: right;
+    }
+    .efe-row .efe-bar {
+      flex: 1; height: 10px;
+      background: #0a0a14;
+      border-radius: 2px; overflow: hidden;
+    }
+    .efe-row .efe-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    /* Colors */
+    .fill-extrinsic { background: #22c55e; }
+    .fill-salience { background: #3b82f6; }
+    .fill-novelty { background: #f59e0b; }
+    .fill-reward-high { background: #8b5cf6; }
+    .fill-reward-none { background: #ef4444; }
+    .fill-safe { background: #22c55e; }
+    .fill-risky { background: #f59e0b; }
+
+    /* Reward chart */
+    #reward-chart-container {
+      height: 120px;
+      position: relative;
+    }
+
+    /* Info text */
+    .info-text {
+      font-size: 0.75rem;
+      color: #8080a0;
+      line-height: 1.5;
+    }
+
+    /* Theory cards */
+    .theory-card {
+      background: linear-gradient(135deg, #0f172a, #131328);
+      border: 1px solid #2563eb44;
+      border-radius: 6px;
+      padding: 0.7rem 0.8rem;
+      font-size: 0.72rem;
+      line-height: 1.55;
+      color: #a0a0c0;
+    }
+    .theory-card summary {
+      cursor: pointer;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #3b82f6;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .theory-card summary::before {
+      content: '▶';
+      font-size: 0.5rem;
+      transition: transform 0.15s;
+    }
+    .theory-card[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .theory-card .tc-body {
+      margin-top: 0.5rem;
+    }
+    .theory-card .tc-body p {
+      margin-bottom: 0.4rem;
+    }
+    .theory-card .tc-eq {
+      font-family: 'Georgia', serif;
+      font-style: italic;
+      color: #c0c0e0;
+      text-align: center;
+      margin: 0.5rem 0;
+      font-size: 0.75rem;
+    }
+    .theory-card .tc-label {
+      display: inline-block;
+      border-radius: 2px;
+      padding: 0 4px;
+      font-weight: 600;
+      font-size: 0.65rem;
+    }
+    .tc-ext { color: #22c55e; }
+    .tc-sal { color: #3b82f6; }
+    .tc-nov { color: #f59e0b; }
+
+    /* Live agent annotation */
+    .efe-annotation {
+      background: #0a0a1e;
+      border: 1px solid #1a1a2e;
+      border-left: 3px solid #3b82f6;
+      border-radius: 4px;
+      padding: 0.5rem 0.6rem;
+      font-size: 0.7rem;
+      line-height: 1.5;
+      color: #b0b0d0;
+    }
+    .efe-annotation .ann-driver {
+      font-weight: 600;
+      font-size: 0.72rem;
+    }
+
+    /* Agent description strip */
+    #agent-desc {
+      grid-column: 1 / -1;
+      background: #0d0d18;
+      border-bottom: 1px solid #1a1a2e;
+      padding: 0.3rem 1rem;
+      font-size: 0.68rem;
+      color: #8080a0;
+      min-height: 1.6rem;
+      display: flex;
+      align-items: center;
+    }
+    #agent-desc .ad-name { color: #a78bfa; font-weight: 600; margin-right: 0.5rem; }
+    #agent-desc .ad-efe { font-family: 'Georgia', serif; font-style: italic; color: #606080; }
+
+    /* Parameter sliders */
+    #param-panel {
+      background: #11111e;
+      border: 1px solid #1a1a2e;
+      border-radius: 6px;
+      padding: 0.7rem 0.8rem;
+    }
+    #param-panel h3 {
+      font-size: 0.7rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: #606080; margin-bottom: 0.5rem;
+    }
+    .slider-row {
+      display: flex; align-items: center;
+      margin-bottom: 0.35rem; gap: 0.4rem;
+    }
+    .slider-row label {
+      font-size: 0.68rem; color: #8080a0;
+      width: 72px; text-align: right;
+    }
+    .slider-row input[type="range"] {
+      flex: 1; height: 4px;
+      -webkit-appearance: none; appearance: none;
+      background: #1a1a2e; border-radius: 2px;
+      outline: none;
+    }
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #4a6cf7;
+      cursor: pointer;
+      border: 1px solid #2a2a4a;
+    }
+    .slider-row input[type="range"]::-moz-range-thumb {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #4a6cf7;
+      cursor: pointer;
+      border: 1px solid #2a2a4a;
+    }
+    .slider-row input[type="number"] {
+      flex: 1;
+      background: #0a0a14;
+      border: 1px solid #2a2a4a;
+      color: #c0c0d8;
+      border-radius: 4px;
+      padding: 0.28rem 0.4rem;
+      font-size: 0.72rem;
+    }
+    .slider-row .slider-val {
+      font-size: 0.68rem; color: #a0a0c0;
+      width: 32px; text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .slider-sep {
+      border: none; border-top: 1px solid #1a1a2e;
+      margin: 0.4rem 0;
+    }
+    #model-sliders { display: none; }
+    #model-sliders.visible { display: block; }
+    #model-sliders h4 {
+      font-size: 0.62rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: #505070; margin-bottom: 0.35rem;
+    }
+    @keyframes fadeInScale {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Experimenter */
+    .exp-shell {
+      position: absolute;
+      inset: 0;
+      padding: 1rem;
+      background:
+        radial-gradient(circle at top left, rgba(59,130,246,0.10), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(167,139,250,0.10), transparent 35%),
+        #080810;
+      overflow: auto;
+    }
+    .exp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .exp-kicker {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #606080;
+      margin-bottom: 0.2rem;
+    }
+    .exp-title {
+      font-size: 1.25rem;
+      color: #d6d6f0;
+      font-weight: 600;
+    }
+    .exp-status {
+      font-size: 0.74rem;
+      color: #a0a0c0;
+      line-height: 1.5;
+    }
+    .exp-status-panel {
+      margin-top: 0.6rem;
+      color: #8080a0;
+    }
+    .exp-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    .exp-card {
+      background: #0f1120;
+      border: 1px solid #1a1a2e;
+      border-radius: 8px;
+      padding: 0.9rem;
+      min-height: 280px;
+    }
+    .exp-card h3 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #606080;
+      margin-bottom: 0.6rem;
+    }
+    .exp-card canvas {
+      width: 100%;
+      height: 220px;
+      display: block;
+    }
+    .exp-row {
+      display: grid;
+      grid-template-columns: var(--exp-grid-cols, 1.2fr 1fr 1fr 1fr 0.8fr);
+      gap: 0.45rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #1a1a2e;
+      font-size: 0.7rem;
+      color: #a0a0c0;
+      align-items: center;
+    }
+    .exp-row:last-child {
+      border-bottom: none;
+    }
+    .exp-agent {
+      font-weight: 600;
+    }
+    .exp-metric span {
+      color: #d0d0f0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 1100px) {
+      .exp-grid {
+        grid-template-columns: 1fr;
+      }
+      .exp-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading screen -->
+  <div id="loading">
+    <h1>ACTIVE INFERENCE EXPLORER</h1>
+    <div class="subtitle">Schwartenbeck et al. (2019) — Interactive Simulation</div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <div id="loading-status">Initialising...</div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app">
+    <!-- Top bar -->
+    <div id="topbar">
+      <h1>ACTIVE INFERENCE</h1>
+      <select id="scenario-select"></select>
+      <select id="mode-select">
+        <option value="interactive">Interactive</option>
+        <option value="experimenter">Experimenter</option>
+      </select>
+      <select id="agent-select"></select>
+      <button id="btn-step">Step</button>
+      <button id="btn-run">Run 10</button>
+      <button id="btn-experiment">Run 32 Steps</button>
+      <button id="btn-reset">Reset</button>
+      <div class="spacer"></div>
+      <span class="trial-counter"><span id="trial-label">Step</span> <span id="trial-num">0</span></span>
+    </div>
+
+    <div id="agent-desc"></div>
+
+    <!-- 3D Viewport -->
+    <div id="viewport"></div>
+
+    <!-- Side panel -->
+    <div id="sidepanel">
+      <div id="param-panel">
+        <h3>Parameters</h3>
+        <div class="slider-row">
+          <label>β (precision)</label>
+          <input type="range" id="sl-beta" min="0.1" max="8" step="0.1" value="1.0">
+          <span class="slider-val" id="sv-beta">1.0</span>
+        </div>
+        <div class="slider-row">
+          <label style="color:#22c55e">Extrinsic</label>
+          <input type="range" id="sl-ext" min="0" max="2" step="0.05" value="1.0">
+          <span class="slider-val" id="sv-ext">1.0</span>
+        </div>
+        <div class="slider-row">
+          <label style="color:#3b82f6">Salience</label>
+          <input type="range" id="sl-sal" min="0" max="2" step="0.05" value="1.0">
+          <span class="slider-val" id="sv-sal">1.0</span>
+        </div>
+        <div class="slider-row">
+          <label style="color:#f59e0b">Novelty</label>
+          <input type="range" id="sl-nov" min="0" max="2" step="0.05" value="0.0">
+          <span class="slider-val" id="sv-nov">0.0</span>
+        </div>
+        <div id="model-sliders">
+          <hr class="slider-sep">
+          <h4>Generative Model</h4>
+          <div class="slider-row">
+            <label>P(reward)</label>
+            <input type="range" id="sl-rprob" min="0.5" max="1.0" step="0.01" value="0.90">
+            <span class="slider-val" id="sv-rprob">0.90</span>
+          </div>
+          <div class="slider-row">
+            <label>P(left good)</label>
+            <input type="range" id="sl-ctx" min="0.0" max="1.0" step="0.01" value="0.50">
+            <span class="slider-val" id="sv-ctx">0.50</span>
+          </div>
+          <div class="slider-row">
+            <label>Reward size</label>
+            <input type="range" id="sl-rmag" min="0.5" max="8.0" step="0.25" value="4.0">
+            <span class="slider-val" id="sv-rmag">4.0</span>
+          </div>
+        </div>
+      </div>
+      <div id="scenario-panel"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
