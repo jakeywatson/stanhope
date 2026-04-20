@@ -84,12 +84,14 @@ layout: two-cols
 </v-clicks>
 
 <div v-click class="pt-6 text-sm opacity-80">
+
 The agent does not know $p$. It must choose between exploiting what it knows (safe) and learning what it doesn't (risky) — without an explicit exploration bonus.
+
 </div>
 
 ::right::
 
-<div class="pl-6">
+<div class="flex flex-col items-center">
 
 ```mermaid {scale: 0.8}
 graph TD
@@ -99,8 +101,10 @@ graph TD
   Risky[Risky arm<br/>+large w.p. p<br/>-no-reward w.p. 1-p]
 ```
 
-<div class="pt-4 text-sm opacity-75">
-<b>Why this task?</b> It isolates the learning problem. No hidden context, no partial observability — the only uncertainty is about $p$, a parameter of the observation model.
+<div class="pt-4 text-sm opacity-75 px-4">
+
+**Why this task?** It isolates the learning problem. No hidden context, no partial observability — the only uncertainty is about $p$, a parameter of the observation model.
+
 </div>
 
 </div>
@@ -237,7 +241,7 @@ Paper starts at $\boldsymbol{\alpha}{=}[1,1]$ — maximum a priori uncertainty.
 </div>
 
 </div>
-<div class="bg-white rounded-lg p-2">
+<div class="bg-white rounded-lg p-2 self-center">
 
 <img src="/beta-sharpening-basic.png" class="w-full" />
 
@@ -386,7 +390,7 @@ The second identity is what makes **novelty** computable in closed form — no s
 </div>
 
 </div>
-<div class="bg-white rounded-lg p-2">
+<div class="bg-white rounded-lg p-2 self-center">
 
 <img src="/dirichlet-digamma.png" class="w-full" />
 
@@ -788,40 +792,95 @@ class: text-center
 # Drone work at Munin Dynamics
 <div class="pt-2 text-sm opacity-70">Feb — Aug 2025 · camera-guided interceptor (Micro-MANPAD)</div>
 
-<div class="grid grid-cols-3 gap-6 pt-8 text-left text-sm">
+<div class="pt-3 text-sm opacity-80 max-w-3xl mx-auto">
+
+Munin's bet: the cheapest, smallest missile system that can take out an FPV drone — pocket-sized, scalable to Ukraine-sized threat volumes. My remit was the perception stack on the interceptor itself.
+
+</div>
+
+<div class="grid grid-cols-3 gap-6 pt-6 text-left text-sm">
 
 <div>
 
 **Problem**
 - Detect 7″ quadcopter at 30–350 m
 - 150 m/s closing velocity
-- SWAP: <30 mm diameter processing board
+- SWaP: <30 mm diameter processing board
 - $250 production BoM
 
 </div>
 <div>
 
 **What I built**
-- Camera / SBC hardware selection against DRI/Johnson criteria
-- FOMO detector trained on-platform, quantised for edge
-- Full capture → detect → track pipeline on a Digi ConnectCore 93
+- Camera / SBC selection against DRI/Johnson criteria
+- FOMO detector, trained on-platform, int8-quantised
+- Capture → detect → track pipeline on a Digi ConnectCore 93
 - Field-test support
 
 </div>
 <div>
 
 **Numbers that mattered**
-- FOMO beat YOLOv11n: **90% vs mAP50 0.27**
-- Model size: **~200 KB** (vs ~5 MB for YOLO)
-- Inference: **<1 ms** at 128×128 on the test SBC
-- Total BoM: well inside $250
+- FOMO vs YOLOv11n: **90% recall vs mAP50 0.27**
+- Model size: **~200 KB** (vs ~5 MB)
+- Inference: **<1 ms** at 128×128
+- BoM well inside $250
 
 </div>
 </div>
 
-<div class="pt-6 text-sm opacity-80">
-Earlier at Frazer-Nash (autonomous vehicle vision): rebuilt the perception pipeline from 20 → 70+ fps on Jetson edge hardware while improving detection accuracy.
+<div class="pt-5 text-sm opacity-75 max-w-3xl mx-auto">
+Earlier · <b>Frazer-Nash</b> (autonomous-vehicle vision, Dstl-adjacent): rebuilt the perception pipeline 20 → 70+ fps on Jetson and scoped ML safety cases for UGV perception.
 </div>
+
+---
+
+# Where this work meets Stanhope
+
+<div class="text-sm opacity-80 pt-1">
+
+The perception I built is the **discriminative layer**. Everything interesting Stanhope (and this paper) does sits *above* it.
+
+</div>
+
+<div class="grid grid-cols-2 gap-8 pt-3 text-sm">
+
+<div class="border-l-4 border-slate-400 pl-4">
+
+**What my pipeline *does***
+
+- Pixels → $\{\text{drone},\ \varnothing\}$ in <1 ms on a $10 SBC
+- No posterior — no notion of *"I don't know"*
+- Retrain per domain: clutter, lighting, target drift
+- Greedy tracker: chase the highest-confidence box
+
+</div>
+<div class="border-l-4 border-emerald-400 pl-4">
+
+**What active inference *adds***
+
+- Explicit $q(\theta)$ — a budget for what's unknown
+- Salience + novelty planned *ahead* → **where should the sensor look next?**
+- One objective drives pursuit *and* exploration — no $\varepsilon$-greedy
+- Self-terminating curiosity (digamma, closed form)
+
+</div>
+
+</div>
+
+<div class="pt-3 text-xs opacity-75">
+
+Stanhope's Real World Model is pitched at exactly this layer — adaptive, uncertainty-aware behaviour on small autonomous platforms, trialled in drone & robotics partnerships. Frazer-Nash's SENTINEL (RL for sensor management) is the same problem shape; active inference derives it from one variational objective instead of a hand-engineered reward.
+
+</div>
+
+<div class="pt-3 text-sm font-semibold">
+The offering: I've shipped the perception pipeline that sits <em>underneath</em> a Stanhope-style agent on a defence UAS. What I came here for is the agent on top.
+</div>
+
+<!--
+If asked "why did you leave Munin?" — it's an excellent applied problem but the ceiling is a better detector; I want to work on the planner above it. If asked about Frazer-Nash SENTINEL in interview: it's an RL-for-sensor-management system; active inference collapses the same objective to salience + novelty without a separately learned reward model.
+-->
 
 ---
 layout: center

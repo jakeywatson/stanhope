@@ -190,9 +190,10 @@ def fig_dirichlet_digamma():
     ax2.set_xlabel("$\\alpha_0 = \\sum_i \\alpha_i$")
     ax2.set_ylabel("$\\mathbb{E}[\\ln\\theta_i] = \\psi(\\alpha_i) - \\psi(\\alpha_0)$", fontsize=10)
     ax2.set_title("Log-moment is closed-form")
+    ax2.set_ylim(-1.35, -0.55)
     ax2.axhline(np.log(0.5), color=C_MUTE, ls="--", lw=1, alpha=0.6)
-    ax2.text(38, np.log(0.5) + 0.02, "ln 0.5",
-             fontsize=8.5, color=C_MUTE, ha="right", va="bottom")
+    ax2.text(38, np.log(0.5) - 0.04, "ln 0.5",
+             fontsize=8.5, color=C_MUTE, ha="right", va="top")
     save(fig, "dirichlet-digamma.png")
 
 
