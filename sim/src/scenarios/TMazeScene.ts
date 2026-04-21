@@ -35,6 +35,9 @@ export class TMazeScene implements SceneController {
   private moving = false;
   private onArrive: (() => void) | null = null;
   private rewardHistory: number[] = [];
+  private trailSegments: THREE.Line[] = [];
+  private trailPointsCurrent: THREE.Vector3[] = [];
+  private ghostSegments: THREE.Line[] = [];
 
   init(container: HTMLElement): SceneObjects {
     const { renderer, scene, camera, controls } = createBaseRenderer(container);
@@ -67,21 +70,26 @@ export class TMazeScene implements SceneController {
   }
 
   async animateStep(result: any): Promise<void> {
+    // Fade the previous trial's trail into a ghost before starting the new one.
+    this.demoteTrailToGhost();
+    this.trailPointsCurrent = [POSITIONS.centre.clone().setY(0.15)];
+
+    const policyColor = this.policyColorForResult(result);
     const traj = result.trajectory;
     for (let i = 0; i < traj.length; i++) {
       const loc = traj[i].location;
       const prevLoc = i > 0 ? traj[i - 1].location : null;
       if (loc === prevLoc) {
-        // If a future policy reuses the same location, just pause.
         await sleep(250);
         continue;
       }
       if (prevLoc && prevLoc !== 'centre' && loc !== 'centre') {
-        // Route through centre between non-centre locations
         await this.moveToLocation('centre');
+        this.extendTrail('centre', policyColor);
         await sleep(150);
       }
       await this.moveToLocation(loc);
+      this.extendTrail(loc, policyColor);
       await sleep(250);
     }
     this.flashReward(traj[traj.length - 1]?.observation ?? '');
@@ -89,9 +97,49 @@ export class TMazeScene implements SceneController {
     this.resetAgent();
   }
 
+  private policyColorForResult(result: any): number {
+    const map: Record<string, number> = {
+      left_direct: 0x22c55e, right_direct: 0xf59e0b, cue_then_best: 0x3b82f6,
+    };
+    return map[result.policy] ?? 0x7c3aed;
+  }
+
+  private extendTrail(location: string, colorHex: number) {
+    const dest = POSITIONS[location];
+    if (!dest) return;
+    const pt = dest.clone(); pt.y = 0.15;
+    this.trailPointsCurrent.push(pt);
+    if (this.trailPointsCurrent.length < 2) return;
+    const pts = this.trailPointsCurrent.slice(-2);
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.7 });
+    const line = new THREE.Line(geo, mat);
+    this.sceneObj.add(line);
+    this.trailSegments.push(line);
+  }
+
+  private demoteTrailToGhost() {
+    for (const seg of this.trailSegments) {
+      const mat = seg.material as THREE.LineBasicMaterial;
+      mat.opacity = 0.15;
+      this.ghostSegments.push(seg);
+    }
+    this.trailSegments = [];
+    // Cap ghost trail length so it doesn't accumulate forever.
+    while (this.ghostSegments.length > 40) {
+      const old = this.ghostSegments.shift();
+      if (old) this.sceneObj.remove(old);
+    }
+  }
+
   reset(): void {
     this.resetAgent();
     this.rewardHistory = [];
+    for (const seg of this.trailSegments) this.sceneObj.remove(seg);
+    this.trailSegments = [];
+    for (const seg of this.ghostSegments) this.sceneObj.remove(seg);
+    this.ghostSegments = [];
+    this.trailPointsCurrent = [];
   }
 
   dispose(): void {
@@ -102,7 +150,7 @@ export class TMazeScene implements SceneController {
 
   buildPanel(): string {
     return `
-      <details class="theory-card" open>
+      <details class="theory-card">
         <summary>Paper Connection — Schwartenbeck et al. 2019</summary>
         <div class="tc-body">
           <p>The T-maze is the <strong>core paradigm</strong> from the paper. The agent must decide whether to go directly to an arm (gamble) or first visit the <strong>cue</strong> location to resolve uncertainty.</p>

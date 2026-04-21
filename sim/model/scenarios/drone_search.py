@@ -406,6 +406,11 @@ class DroneSearchScenario:
         chosen_wp = self.current_wp
         self.wp_steps += 1
 
+        # Committed explore waypoints may not be in the fresh waypoint pool,
+        # so ensure the chosen waypoint always has an EFE entry for the UI.
+        if chosen_wp['name'] not in efe_per_wp:
+            efe_per_wp[chosen_wp['name']] = self._evaluate_waypoint(chosen_wp)
+
         # Move one cell toward chosen waypoint
         prev_heading = self.prev_heading
         move = self._best_move_toward(chosen_wp)
@@ -877,6 +882,7 @@ class DroneSearchScenario:
             'fov_radius': self._fov_radius(z),
             'n_objects': self.n_objects,
             'n_discovered': len(self.discovered),
+            'seen_cells': [[int(cx), int(cy)] for (cx, cy) in self.seen_cells],
             'explored_pct': round(len(self.seen_cells) / (self.grid_size * self.grid_size) * 100, 1),
             'target_found': self.found_target,
             'mission_failed': self.mission_failed,

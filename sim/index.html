@@ -50,8 +50,8 @@
     /* Main layout */
     #app {
       display: grid;
-      grid-template-columns: 1fr 320px;
-      grid-template-rows: 48px auto 1fr;
+      grid-template-columns: 1fr 340px;
+      grid-template-rows: 54px auto 1fr;
       height: 100vh;
       gap: 0;
     }
@@ -66,16 +66,16 @@
       gap: 1.5rem;
     }
     #topbar h1 {
-      font-size: 0.9rem; font-weight: 500;
-      letter-spacing: 0.05em; color: #8080a0;
+      font-size: 1rem; font-weight: 500;
+      letter-spacing: 0.05em; color: #a0a0c0;
     }
     #topbar select, #topbar button {
       background: #14142a;
       border: 1px solid #2a2a4a;
-      color: #c0c0d8;
-      padding: 0.3rem 0.7rem;
+      color: #d8d8ee;
+      padding: 0.35rem 0.75rem;
       border-radius: 4px;
-      font-size: 0.8rem;
+      font-size: 0.9rem;
       cursor: pointer;
     }
     #topbar button:hover { background: #1e1e3a; }
@@ -85,7 +85,7 @@
     }
     #topbar .spacer { flex: 1; }
     #topbar .trial-counter {
-      font-size: 0.8rem; color: #606080;
+      font-size: 0.9rem; color: #8080a0;
       font-variant-numeric: tabular-nums;
     }
 
@@ -95,6 +95,47 @@
       overflow: hidden;
     }
     #viewport canvas { display: block; }
+
+    /* Live ribbon — chosen policy / dominant EFE driver above the 3D scene */
+    #viewport-ribbon {
+      position: absolute;
+      top: 0.9rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 0.45rem 1rem;
+      background: rgba(10, 10, 20, 0.72);
+      border: 1px solid rgba(124, 92, 246, 0.35);
+      border-radius: 999px;
+      font-size: 0.92rem;
+      color: #d8d8ee;
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+      z-index: 4;
+      opacity: 0;
+      transition: opacity 0.25s;
+      white-space: nowrap;
+    }
+    #viewport-ribbon.visible { opacity: 1; }
+    #viewport-ribbon .rb-sep {
+      color: #3a3a5a;
+      font-size: 0.9rem;
+    }
+    #viewport-ribbon .rb-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7070a0;
+    }
+    #viewport-ribbon .rb-policy {
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    #viewport-ribbon .rb-driver {
+      font-weight: 600;
+    }
 
     /* Side panel */
     #sidepanel {
@@ -112,25 +153,49 @@
       border-radius: 6px;
       padding: 0.8rem;
     }
-    .panel-section h3 {
-      font-size: 0.7rem; font-weight: 600;
+    details.adv-details {
+      padding: 0.6rem 0.8rem;
+    }
+    details.adv-details .adv-summary {
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: #606080;
+      color: #7070a0;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    details.adv-details .adv-summary::before {
+      content: '▶';
+      font-size: 0.55rem;
+      transition: transform 0.15s;
+      color: #505070;
+    }
+    details.adv-details[open] .adv-summary::before {
+      transform: rotate(90deg);
+    }
+    .panel-section h3 {
+      font-size: 0.82rem; font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7c7ca0;
       margin-bottom: 0.6rem;
     }
 
     /* Belief bars */
     .belief-bar {
       display: flex; align-items: center;
-      margin-bottom: 0.4rem; gap: 0.5rem;
+      margin-bottom: 0.45rem; gap: 0.5rem;
     }
     .belief-bar label {
-      font-size: 0.7rem; color: #8080a0;
-      width: 80px; text-align: right;
+      font-size: 0.82rem; color: #9898b8;
+      width: 82px; text-align: right;
     }
     .belief-bar .bar-track {
-      flex: 1; height: 14px;
+      flex: 1; height: 16px;
       background: #0a0a14;
       border-radius: 3px; overflow: hidden;
     }
@@ -140,8 +205,8 @@
       transition: width 0.3s;
     }
     .belief-bar .bar-value {
-      font-size: 0.7rem; color: #a0a0c0;
-      width: 36px; font-variant-numeric: tabular-nums;
+      font-size: 0.82rem; color: #c0c0d8;
+      width: 38px; font-variant-numeric: tabular-nums;
     }
 
     /* EFE decomposition */
@@ -150,11 +215,11 @@
       margin-bottom: 0.3rem; gap: 0.4rem;
     }
     .efe-row label {
-      font-size: 0.65rem; color: #8080a0;
-      width: 70px; text-align: right;
+      font-size: 0.78rem; color: #9898b8;
+      width: 74px; text-align: right;
     }
     .efe-row .efe-bar {
-      flex: 1; height: 10px;
+      flex: 1; height: 11px;
       background: #0a0a14;
       border-radius: 2px; overflow: hidden;
     }
@@ -192,17 +257,17 @@
       border: 1px solid #2563eb44;
       border-radius: 6px;
       padding: 0.7rem 0.8rem;
-      font-size: 0.72rem;
+      font-size: 0.82rem;
       line-height: 1.55;
-      color: #a0a0c0;
+      color: #b8b8d0;
     }
     .theory-card summary {
       cursor: pointer;
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: #3b82f6;
+      color: #5d9bff;
       list-style: none;
       display: flex;
       align-items: center;
@@ -225,17 +290,17 @@
     .theory-card .tc-eq {
       font-family: 'Georgia', serif;
       font-style: italic;
-      color: #c0c0e0;
+      color: #d0d0e8;
       text-align: center;
       margin: 0.5rem 0;
-      font-size: 0.75rem;
+      font-size: 0.85rem;
     }
     .theory-card .tc-label {
       display: inline-block;
       border-radius: 2px;
       padding: 0 4px;
       font-weight: 600;
-      font-size: 0.65rem;
+      font-size: 0.75rem;
     }
     .tc-ext { color: #22c55e; }
     .tc-sal { color: #3b82f6; }
@@ -247,14 +312,14 @@
       border: 1px solid #1a1a2e;
       border-left: 3px solid #3b82f6;
       border-radius: 4px;
-      padding: 0.5rem 0.6rem;
-      font-size: 0.7rem;
+      padding: 0.55rem 0.7rem;
+      font-size: 0.82rem;
       line-height: 1.5;
-      color: #b0b0d0;
+      color: #c0c0e0;
     }
     .efe-annotation .ann-driver {
       font-weight: 600;
-      font-size: 0.72rem;
+      font-size: 0.88rem;
     }
 
     /* Agent description strip */
@@ -262,10 +327,10 @@
       grid-column: 1 / -1;
       background: #0d0d18;
       border-bottom: 1px solid #1a1a2e;
-      padding: 0.3rem 1rem;
-      font-size: 0.68rem;
-      color: #8080a0;
-      min-height: 1.6rem;
+      padding: 0.35rem 1rem;
+      font-size: 0.8rem;
+      color: #9898b8;
+      min-height: 1.8rem;
       display: flex;
       align-items: center;
     }
@@ -468,7 +533,15 @@
     <div id="agent-desc"></div>
 
     <!-- 3D Viewport -->
-    <div id="viewport"></div>
+    <div id="viewport">
+      <div id="viewport-ribbon">
+        <span class="rb-label">Policy</span>
+        <span class="rb-policy" id="rb-policy">—</span>
+        <span class="rb-sep">·</span>
+        <span class="rb-label">Driver</span>
+        <span class="rb-driver" id="rb-driver">—</span>
+      </div>
+    </div>
 
     <!-- Side panel -->
     <div id="sidepanel">

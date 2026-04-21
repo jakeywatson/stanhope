@@ -218,7 +218,13 @@ function disposeCurrentView() {
   }
   cancelAnimationFrame(animFrameId);
   const viewport = document.getElementById('viewport') as HTMLDivElement | null;
-  if (viewport) viewport.innerHTML = '';
+  if (viewport) {
+    // Preserve the ribbon across scene switches; clear everything else.
+    const ribbon = document.getElementById('viewport-ribbon');
+    viewport.innerHTML = '';
+    if (ribbon) viewport.appendChild(ribbon);
+  }
+  setRibbon(null, null);
 }
 
 async function boot() {
@@ -238,7 +244,11 @@ async function boot() {
   progress.style.width = '80%';
   const scenarios = listScenarios(pyodide);
   const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement;
+  // Hide grid_maze from the interview demo — its story duplicates the T-maze.
+  // Expose it with ?scenarios=all for full access.
+  const showAll = new URLSearchParams(window.location.search).get('scenarios') === 'all';
   for (const s of scenarios) {
+    if (!showAll && s.id === 'grid_maze') continue;
     const opt = document.createElement('option');
     opt.value = s.id;
     opt.textContent = s.name;
@@ -275,6 +285,7 @@ async function boot() {
     callHardReset(pyodide, currentAgent);
     syncSlidersToAgent(currentAgent);
     if (controller) { controller.reset(); controller.resetPanel(); }
+    setRibbon(null, null);
     updateAgentDesc();
   });
 
@@ -321,6 +332,7 @@ async function boot() {
     } else {
       callReset(pyodide, currentAgent);
       if (controller) { controller.reset(); controller.resetPanel(); }
+      setRibbon(null, null);
       updateTrialCounter(0);
     }
   });
@@ -408,6 +420,7 @@ async function doStep() {
     await controller!.animateStep(result);
     if (token !== cancelToken) return;
     controller!.updatePanel(result);
+    updateRibbonFromResult(result);
     updateTrialCounter(result.trial ?? result.step ?? 0);
   } catch (e) {
     if (token === cancelToken) console.error('Step failed:', e);
@@ -546,6 +559,83 @@ function setButtons(enabled: boolean) {
 function updateTrialCounter(n: number) {
   const el = document.getElementById('trial-num');
   if (el) el.textContent = String(n);
+}
+
+type RibbonInfo = { policy: string; policyColor: string; driver: string; driverColor: string } | null;
+function setRibbon(info: RibbonInfo, _result: any) {
+  const ribbon = document.getElementById('viewport-ribbon');
+  const pEl = document.getElementById('rb-policy');
+  const dEl = document.getElementById('rb-driver');
+  if (!ribbon || !pEl || !dEl) return;
+  if (!info) {
+    ribbon.classList.remove('visible');
+    pEl.textContent = '—'; pEl.style.color = '';
+    dEl.textContent = '—'; dEl.style.color = '';
+    return;
+  }
+  pEl.textContent = info.policy;
+  pEl.style.color = info.policyColor;
+  dEl.textContent = info.driver;
+  dEl.style.color = info.driverColor;
+  ribbon.classList.add('visible');
+}
+
+const COMP_COLORS: Record<string, string> = {
+  extrinsic: '#22c55e', salience: '#3b82f6', novelty: '#f59e0b',
+};
+const COMP_LABELS: Record<string, string> = {
+  extrinsic: 'Extrinsic value', salience: 'Salience', novelty: 'Novelty',
+};
+
+function updateRibbonFromResult(result: any) {
+  // Policy label + color vary by scenario. Prefer explicit fields.
+  let policyName = '—';
+  let policyColor = '#d8d8ee';
+  let efeEntry: Record<string, number> | undefined;
+
+  if (result.policy && result.efe?.[result.policy]) {
+    // T-maze
+    const pMap: Record<string, string> = {
+      left_direct: 'L direct', right_direct: 'R direct', cue_then_best: 'Cue → Best',
+    };
+    const cMap: Record<string, string> = {
+      left_direct: '#22c55e', right_direct: '#f59e0b', cue_then_best: '#3b82f6',
+    };
+    policyName = pMap[result.policy] ?? result.policy;
+    policyColor = cMap[result.policy] ?? '#d8d8ee';
+    efeEntry = result.efe[result.policy];
+  } else if (result.waypoint && result.efe?.[result.waypoint]) {
+    // Drone
+    policyName = result.waypoint;
+    policyColor = '#06b6d4';
+    efeEntry = result.efe[result.waypoint];
+  } else if (result.goal && result.goal_efe?.[result.goal]) {
+    // Grid maze
+    policyName = result.goal;
+    policyColor = result.goal_type === 'informant' ? '#06b6d4' : '#f8fafc';
+    const g = result.goal_efe[result.goal];
+    efeEntry = { extrinsic: g.extrinsic, salience: g.salience, novelty: g.novelty };
+  }
+
+  if (!efeEntry) {
+    setRibbon(null, result);
+    return;
+  }
+
+  const vals: [string, number][] = [
+    ['extrinsic', Math.abs(efeEntry.extrinsic ?? 0)],
+    ['salience',  Math.abs(efeEntry.salience  ?? 0)],
+    ['novelty',   Math.abs(efeEntry.novelty   ?? 0)],
+  ];
+  vals.sort((a, b) => b[1] - a[1]);
+  const [topKey, topVal] = vals[0];
+  const tied = vals[1][1] >= topVal * 0.8 && topVal > 0;
+  const driver = tied
+    ? `${COMP_LABELS[topKey]} ≈ ${COMP_LABELS[vals[1][0]]}`
+    : `${COMP_LABELS[topKey]} dominates`;
+  const driverColor = COMP_COLORS[topKey] ?? '#d8d8ee';
+
+  setRibbon({ policy: policyName, policyColor, driver, driverColor }, result);
 }
 
 function onResize() {

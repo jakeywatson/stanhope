@@ -42,6 +42,8 @@ export class GridMazeScene implements SceneController {
   private rewardHistory: number[] = [];
   private outcomeOverlay: HTMLDivElement | null = null;
   private missionEnded = false;
+  private efeArrow: THREE.ArrowHelper | null = null;
+  private lastMaze: any = null;
 
   init(container: HTMLElement): SceneObjects {
     const { renderer, scene, camera, controls } = createBaseRenderer(container);
@@ -91,6 +93,7 @@ export class GridMazeScene implements SceneController {
 
   async animateStep(result: any): Promise<void> {
     if (!this.builtGrid && result.maze) this.buildMaze(result.maze);
+    if (result.maze) this.lastMaze = result.maze;
     this.updateBeliefs(result.beliefs?.target_belief, result.maze?.rooms);
     const [r, c] = result.position;
     const wp = this.gridToWorld(r, c);
@@ -99,6 +102,7 @@ export class GridMazeScene implements SceneController {
     this.trailPoints.push(new THREE.Vector3(wp.x, 0.15, wp.z));
     this.updateTrail();
     this.updateOutcomeVisuals(result);
+    this.updateEfeArrow(result);
     if (!this.missionEnded && (result.found_target || result.mission_failed)) {
       this.missionEnded = true;
       this.showOutcomeOverlay(result);
@@ -120,6 +124,7 @@ export class GridMazeScene implements SceneController {
     this.infoMarkers = [];
     for (const label of this.infoLabels) this.sceneObj.remove(label);
     this.infoLabels = [];
+    if (this.efeArrow) { this.sceneObj.remove(this.efeArrow); this.efeArrow = null; }
     this.builtGrid = false;
     this.trailPoints = [];
     this.updateTrail();
@@ -128,6 +133,7 @@ export class GridMazeScene implements SceneController {
     this.targetPos.copy(this.agent.position);
     this.rewardHistory = [];
     this.missionEnded = false;
+    this.lastMaze = null;
     if (this.outcomeOverlay) { this.outcomeOverlay.remove(); this.outcomeOverlay = null; }
   }
 
@@ -139,7 +145,7 @@ export class GridMazeScene implements SceneController {
     const ROOM_NAMES = ['NE', 'NW', 'SE', 'SW'];
     const ROOM_CSS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'];
     return `
-      <details class="theory-card" open>
+      <details class="theory-card">
         <summary>Paper Connection — Room Search</summary>
         <div class="tc-body">
           <p>The agent searches <strong>4 corner rooms</strong> for a hidden target, with 2 <strong>informant posts</strong> that give noisy directional cues.</p>
@@ -496,6 +502,51 @@ export class GridMazeScene implements SceneController {
         light.intensity = 0.9;
       }
     }
+  }
+
+  private updateEfeArrow(result: any) {
+    if (this.efeArrow) { this.sceneObj.remove(this.efeArrow); this.efeArrow = null; }
+    const goal = result.goal;
+    const efe = result.goal_efe?.[goal];
+    const maze = result.maze ?? this.lastMaze;
+    if (!goal || !efe || !maze || this.missionEnded) return;
+    // Resolve goal cell position
+    let gr: number | null = null, gc: number | null = null;
+    for (const room of maze.rooms ?? []) {
+      if (room.name === goal) { gr = room.pos[0]; gc = room.pos[1]; break; }
+    }
+    if (gr == null) {
+      for (const inf of maze.informants ?? []) {
+        if (inf.name === goal) { gr = inf.pos[0]; gc = inf.pos[1]; break; }
+      }
+    }
+    if (gr == null || gc == null) return;
+
+    const [ar, ac] = result.position;
+    const from = this.gridToWorld(ar, ac);
+    const to = this.gridToWorld(gr, gc);
+    const dir = new THREE.Vector3(to.x - from.x, 0, to.z - from.z);
+    const dist = dir.length();
+    if (dist < 0.1) return;
+    dir.normalize();
+
+    const vals: [string, number][] = [
+      ['extrinsic', Math.abs(efe.extrinsic ?? 0)],
+      ['salience',  Math.abs(efe.salience  ?? 0)],
+      ['novelty',   Math.abs(efe.novelty   ?? 0)],
+    ];
+    vals.sort((a, b) => b[1] - a[1]);
+    const colorHex = vals[0][0] === 'extrinsic' ? 0x22c55e
+                   : vals[0][0] === 'salience'  ? 0x3b82f6
+                   : 0xf59e0b;
+    const origin = new THREE.Vector3(from.x, 0.9, from.z);
+    const arrow = new THREE.ArrowHelper(dir, origin, Math.min(dist, 5), colorHex, 0.5, 0.28);
+    (arrow.line as any).material.transparent = true;
+    (arrow.line as any).material.opacity = 0.75;
+    (arrow.cone as any).material.transparent = true;
+    (arrow.cone as any).material.opacity = 0.9;
+    this.sceneObj.add(arrow);
+    this.efeArrow = arrow;
   }
 
   private updateGoalHeatmap(goalEFE: Record<string, { extrinsic: number; salience: number; novelty: number; total: number }>, chosenGoal: string | undefined): void {

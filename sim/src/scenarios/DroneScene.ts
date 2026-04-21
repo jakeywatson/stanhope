@@ -28,6 +28,13 @@ export class DroneScene implements SceneController {
   private outcomeOverlay: HTMLDivElement | null = null;
   private missionEnded = false;
   private createdObjects = new Set<number>();
+  private exploredTiles: Map<string, THREE.Mesh> = new Map();
+  private frontierTiles: THREE.Mesh[] = [];
+  private altitudePole: THREE.Line | null = null;
+  private altitudeLabel: THREE.Sprite | null = null;
+  private efeArrow: THREE.ArrowHelper | null = null;
+  private observationFlash: THREE.Mesh | null = null;
+  private observationFlashUntil = 0;
 
   init(container: HTMLElement): SceneObjects {
     const { renderer, scene, camera, controls } = createBaseRenderer(container);
@@ -82,11 +89,16 @@ export class DroneScene implements SceneController {
     const [px, py, pz] = result.position;
     const target = new THREE.Vector3(px * CELL + CELL / 2, pz * CELL + CELL / 2, py * CELL + CELL / 2);
     this.targetPos.copy(target);
-    await sleep(120);
+    await sleep(300);
     this.trailPoints.push(target.clone());
     this.updateTrail();
 
     this.updateFrustum(result.position, ss?.fov_radius ?? 2);
+    this.updateExploredTiles(ss?.seen_cells ?? []);
+    this.updateFrontierHalo(ss, result);
+    this.updateAltitudePole(result.position);
+    this.updateEfeArrow(result);
+    this.flashObservation(result);
 
     // Show outcome overlay on mission end
     if (!this.missionEnded && (result.found_target || result.mission_failed || (result.battery ?? 999) <= 0)) {
@@ -105,6 +117,14 @@ export class DroneScene implements SceneController {
     for (const l of this.objectLights) this.scene.remove(l);
     this.objectLights = [];
     if (this.frustumMesh) { this.scene.remove(this.frustumMesh); this.frustumMesh = null; }
+    for (const t of this.exploredTiles.values()) this.scene.remove(t);
+    this.exploredTiles.clear();
+    for (const t of this.frontierTiles) this.scene.remove(t);
+    this.frontierTiles = [];
+    if (this.altitudePole) { this.scene.remove(this.altitudePole); this.altitudePole = null; }
+    if (this.altitudeLabel) { this.scene.remove(this.altitudeLabel); this.altitudeLabel = null; }
+    if (this.efeArrow) { this.scene.remove(this.efeArrow); this.efeArrow = null; }
+    if (this.observationFlash) { this.scene.remove(this.observationFlash); this.observationFlash = null; }
     this.trailPoints = [];
     this.updateTrail();
     this.builtEnv = false;
@@ -122,7 +142,7 @@ export class DroneScene implements SceneController {
 
   buildPanel(): string {
     return `
-      <details class="theory-card" open>
+      <details class="theory-card">
         <summary>Paper Connection — Search & Discriminate</summary>
         <div class="tc-body">
           <p>A drone must <strong>find and identify a target object</strong> among 6 similar distractors in a 12×12 grid — directly modelling <a href="https://stanhopeai.com" style="color:#06b6d4">Stanhope AI's</a> FEM world model for autonomous drone perception.</p>
@@ -169,17 +189,19 @@ export class DroneScene implements SceneController {
           <div class="belief-bar"><label style="font-size:0.7rem">z=${z}</label><div class="bar-track"><div class="bar-fill fill-novelty" id="disc-z${z}" style="width:60%"></div></div><span class="bar-value" id="disc-val-z${z}">0.60</span></div>
         `).join('')}
       </div>
-      <div class="panel-section">
-        <h3>Search Model (learned)</h3>
-        ${[2, 3, 4].map(z => `
-          <div class="belief-bar"><label style="font-size:0.7rem">z=${z} gain</label><div class="bar-track"><div class="bar-fill fill-salience" id="search-z${z}" style="width:40%"></div></div><span class="bar-value" id="search-val-z${z}">1.00</span></div>
-          <div class="belief-bar"><label style="font-size:0.7rem">z=${z} clear</label><div class="bar-track"><div class="bar-fill fill-extrinsic" id="clear-z${z}" style="width:80%"></div></div><span class="bar-value" id="clear-val-z${z}">0.80</span></div>
-        `).join('')}
-      </div>
-      <div class="panel-section">
-        <h3>Direction Model (learned)</h3>
-        <div id="dir-profile"></div>
-      </div>
+      <details class="panel-section adv-details">
+        <summary class="adv-summary">Search Model (learned) — advanced</summary>
+        <div style="margin-top:0.5rem">
+          ${[2, 3, 4].map(z => `
+            <div class="belief-bar"><label style="font-size:0.78rem">z=${z} gain</label><div class="bar-track"><div class="bar-fill fill-salience" id="search-z${z}" style="width:40%"></div></div><span class="bar-value" id="search-val-z${z}">1.00</span></div>
+            <div class="belief-bar"><label style="font-size:0.78rem">z=${z} clear</label><div class="bar-track"><div class="bar-fill fill-extrinsic" id="clear-z${z}" style="width:80%"></div></div><span class="bar-value" id="clear-val-z${z}">0.80</span></div>
+          `).join('')}
+        </div>
+      </details>
+      <details class="panel-section adv-details">
+        <summary class="adv-summary">Direction Model (learned) — advanced</summary>
+        <div id="dir-profile" style="margin-top:0.5rem"></div>
+      </details>
       <div class="panel-section">
         <h3>Current Waypoint</h3>
         <div id="current-wp" style="font-size:1.0rem;font-weight:700;color:#06b6d4;margin-bottom:0.3rem;">—</div>
@@ -568,6 +590,158 @@ export class DroneScene implements SceneController {
     this.outcomeOverlay = overlay;
   }
 
+  private updateExploredTiles(cells: number[][]) {
+    for (const [cx, cy] of cells) {
+      const key = `${cx},${cy}`;
+      if (this.exploredTiles.has(key)) continue;
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x06b6d4, transparent: true, opacity: 0.08, depthWrite: false,
+      });
+      const geo = new THREE.PlaneGeometry(CELL * 0.92, CELL * 0.92);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(cx * CELL + CELL / 2, 0.02, cy * CELL + CELL / 2);
+      this.scene.add(mesh);
+      this.exploredTiles.set(key, mesh);
+    }
+  }
+
+  private updateFrontierHalo(ss: any, result: any) {
+    for (const t of this.frontierTiles) this.scene.remove(t);
+    this.frontierTiles = [];
+    if (!ss || result.found_target || result.mission_failed) return;
+
+    // Frontier = unseen cells adjacent to at least one seen cell (4-connected).
+    const size: number = ss.grid_size ?? this.gridW;
+    const seen: Set<string> = new Set((ss.seen_cells ?? []).map((c: number[]) => `${c[0]},${c[1]}`));
+    if (seen.size === 0) return;
+    const frontier: Array<[number, number]> = [];
+    for (let x = 0; x < size; x++) {
+      for (let y = 0; y < size; y++) {
+        if (seen.has(`${x},${y}`)) continue;
+        const adj = [
+          [x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1],
+        ];
+        if (adj.some(([nx, ny]) => seen.has(`${nx},${ny}`))) {
+          frontier.push([x, y]);
+        }
+      }
+    }
+    for (const [cx, cy] of frontier) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xf59e0b, transparent: true, opacity: 0.18, depthWrite: false,
+      });
+      const geo = new THREE.PlaneGeometry(CELL * 0.88, CELL * 0.88);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(cx * CELL + CELL / 2, 0.05, cy * CELL + CELL / 2);
+      this.scene.add(mesh);
+      this.frontierTiles.push(mesh);
+    }
+  }
+
+  private updateAltitudePole(pos: number[]) {
+    const [px, py, pz] = pos;
+    const x = px * CELL + CELL / 2;
+    const y = py * CELL + CELL / 2;
+    const h = pz * CELL + CELL / 2;
+    if (this.altitudePole) this.scene.remove(this.altitudePole);
+    const mat = new THREE.LineDashedMaterial({
+      color: 0xa78bfa, dashSize: 0.25, gapSize: 0.15, transparent: true, opacity: 0.55,
+    });
+    const pts = [new THREE.Vector3(x, 0.05, y), new THREE.Vector3(x, h, y)];
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const line = new THREE.Line(geo, mat);
+    line.computeLineDistances();
+    this.scene.add(line);
+    this.altitudePole = line;
+
+    if (!this.altitudeLabel) {
+      this.altitudeLabel = this.makeTextSprite(`z=${pz}`, '#a78bfa');
+      this.altitudeLabel.scale.set(1.4, 0.35, 1);
+      this.scene.add(this.altitudeLabel);
+    } else {
+      // Regenerate label texture so altitude value stays fresh.
+      this.scene.remove(this.altitudeLabel);
+      this.altitudeLabel = this.makeTextSprite(`z=${pz}`, '#a78bfa');
+      this.altitudeLabel.scale.set(1.4, 0.35, 1);
+      this.scene.add(this.altitudeLabel);
+    }
+    this.altitudeLabel.position.set(x + 0.6, h / 2, y);
+  }
+
+  private updateEfeArrow(result: any) {
+    if (this.efeArrow) { this.scene.remove(this.efeArrow); this.efeArrow = null; }
+    const wp = result.waypoint;
+    const efe = result.efe?.[wp];
+    if (!wp || !efe) return;
+    // Resolve waypoint target cell from scan_state's objects list when possible.
+    const ss = result.scan_state;
+    if (!ss) return;
+    let tx: number | null = null, ty: number | null = null, tz = 2;
+    for (const obj of ss.objects ?? []) {
+      if (wp.includes(obj.name)) {
+        if (obj.x == null) return;
+        tx = obj.x; ty = obj.y;
+        if (wp.startsWith('Confirm')) tz = 1;
+        break;
+      }
+    }
+    if (tx == null || ty == null) return;
+
+    const [px, py, pz] = result.position;
+    const from = new THREE.Vector3(px * CELL + CELL / 2, pz * CELL + CELL / 2, py * CELL + CELL / 2);
+    const to = new THREE.Vector3(tx * CELL + CELL / 2, tz * CELL + CELL / 2, ty * CELL + CELL / 2);
+    const dir = to.clone().sub(from);
+    const dist = dir.length();
+    if (dist < 0.1) return;
+    dir.normalize();
+
+    // Dominant component colour
+    const vals: [string, number][] = [
+      ['extrinsic', Math.abs(efe.extrinsic ?? 0)],
+      ['salience',  Math.abs(efe.salience  ?? 0)],
+      ['novelty',   Math.abs(efe.novelty   ?? 0)],
+    ];
+    vals.sort((a, b) => b[1] - a[1]);
+    const colorHex = vals[0][0] === 'extrinsic' ? 0x22c55e
+                   : vals[0][0] === 'salience'  ? 0x3b82f6
+                   : 0xf59e0b;
+    const arrow = new THREE.ArrowHelper(dir, from, Math.min(dist, 8), colorHex, 0.6, 0.35);
+    (arrow.line as any).material.transparent = true;
+    (arrow.line as any).material.opacity = 0.7;
+    (arrow.cone as any).material.transparent = true;
+    (arrow.cone as any).material.opacity = 0.85;
+    this.scene.add(arrow);
+    this.efeArrow = arrow;
+  }
+
+  private flashObservation(result: any) {
+    if (this.observationFlash) { this.scene.remove(this.observationFlash); this.observationFlash = null; }
+    const obs = result.observations ?? [];
+    if (obs.length === 0) return;
+    const latest = obs[obs.length - 1];
+    if (!latest || !latest.object) return;
+    // Find object position
+    const ss = result.scan_state;
+    if (!ss) return;
+    const o = (ss.objects ?? []).find((x: any) => x.name === latest.object);
+    if (!o || o.x == null) return;
+
+    const color = latest.obs === 'target-like' ? 0x22c55e
+                : latest.obs === 'distractor-like' ? 0xef4444
+                : 0x3b82f6;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.6, 1.0, 28),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(o.x * CELL + CELL / 2, 0.15, o.y * CELL + CELL / 2);
+    this.scene.add(ring);
+    this.observationFlash = ring;
+    this.observationFlashUntil = Date.now() + 700;
+  }
+
   private updateFrustum(pos: number[], radius: number) {
     if (this.frustumMesh) this.scene.remove(this.frustumMesh);
     const [px, py, pz] = pos;
@@ -607,6 +781,19 @@ export class DroneScene implements SceneController {
     // Pulse object markers (only created ones)
     for (const m of this.objectMarkers) {
       if (m) m.position.y = 0.3 + Math.sin(Date.now() * 0.003) * 0.03;
+    }
+    // Fade + pulse observation-flash ring
+    if (this.observationFlash) {
+      const mat = this.observationFlash.material as THREE.MeshBasicMaterial;
+      const remaining = this.observationFlashUntil - Date.now();
+      if (remaining <= 0) {
+        this.scene.remove(this.observationFlash);
+        this.observationFlash = null;
+      } else {
+        mat.opacity = Math.max(0, remaining / 700) * 0.85;
+        const s = 1 + (1 - remaining / 700) * 1.5;
+        this.observationFlash.scale.set(s, s, 1);
+      }
     }
   }
 }
