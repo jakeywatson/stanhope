@@ -1,10 +1,11 @@
-import { initPyodide, loadModel, listScenarios, switchScenario, callStep, callReset, callHardReset, callRunExperiment, callBenchmarkBatchAsync, cancelBenchmarkWorkerJobs, setParams, setModelParams } from './bridge';
+import { initPyodide, loadModel, listScenarios, switchScenario, callStep, callReset, callHardReset, callRunExperiment, callTrainEpisodes, callBenchmarkBatchAsync, cancelBenchmarkWorkerJobs, setParams, setModelParams } from './bridge';
 import type { BenchmarkModelParams } from './bridge';
 import { ExperimentDashboard } from './ExperimentDashboard';
 import type { SceneController, SceneObjects } from './scenarios/types';
 import { TMazeScene } from './scenarios/TMazeScene';
 import { GridMazeScene } from './scenarios/GridMazeScene';
 import { DroneScene } from './scenarios/DroneScene';
+import { DroneSceneV2 } from './scenarios/DroneSceneV2';
 
 const progress = document.getElementById('progress-fill') as HTMLDivElement;
 const status = document.getElementById('loading-status') as HTMLDivElement;
@@ -15,6 +16,7 @@ const SCENE_MAP: Record<string, () => SceneController> = {
   tmaze: () => new TMazeScene(),
   grid_maze: () => new GridMazeScene(),
   drone_search: () => new DroneScene(),
+  drone_search_v2: () => new DroneSceneV2(),
 };
 
 // ─── Agent type options per scenario ───
@@ -40,18 +42,27 @@ const AGENTS: Record<string, { value: string; label: string }[]> = {
     { value: 'greedy', label: 'Greedy' },
     { value: 'random', label: 'Random' },
   ],
+  drone_search_v2: [
+    { value: 'combined', label: 'Combined' },
+    { value: 'active_learning', label: 'Active Learning' },
+    { value: 'active_inference', label: 'Active Inference' },
+    { value: 'greedy', label: 'Greedy' },
+    { value: 'random', label: 'Random' },
+  ],
 };
 
 const DEFAULT_STEPS: Record<string, number> = {
   tmaze: 32,
   grid_maze: 20,
   drone_search: 200,
+  drone_search_v2: 400,
 };
 
 const DEFAULT_BENCHMARK_SETTINGS: Record<string, { episodesPerAgent: number; batchSize: number }> = {
   tmaze: { episodesPerAgent: 120, batchSize: 20 },
   grid_maze: { episodesPerAgent: 40, batchSize: 10 },
   drone_search: { episodesPerAgent: 40, batchSize: 10 },
+  drone_search_v2: { episodesPerAgent: 30, batchSize: 5 },
 };
 
 type ViewMode = 'interactive' | 'experimenter';
@@ -244,11 +255,12 @@ async function boot() {
   progress.style.width = '80%';
   const scenarios = listScenarios(pyodide);
   const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement;
-  // Hide grid_maze from the interview demo — its story duplicates the T-maze.
-  // Expose it with ?scenarios=all for full access.
+  // Hide grid_maze and the v1 drone from the interview demo — their stories
+  // duplicate T-maze / are superseded by drone_search_v2. Expose with ?scenarios=all.
   const showAll = new URLSearchParams(window.location.search).get('scenarios') === 'all';
+  const HIDDEN_BY_DEFAULT = new Set(['grid_maze', 'drone_search']);
   for (const s of scenarios) {
-    if (!showAll && s.id === 'grid_maze') continue;
+    if (!showAll && HIDDEN_BY_DEFAULT.has(s.id)) continue;
     const opt = document.createElement('option');
     opt.value = s.id;
     opt.textContent = s.name;
@@ -397,6 +409,10 @@ function activateScenario(scenarioId: string, scenarioChanged = false) {
   // Inject panel HTML
   scenarioPanel.innerHTML = controller.buildPanel();
 
+  if (scenarioId === 'drone_search_v2') {
+    wireDroneV2PanelControls();
+  }
+
   updateTrialCounter(0);
 
   // Start render loop
@@ -541,6 +557,62 @@ async function doBenchmark() {
   } finally {
     if (token === cancelToken) { isRunning = false; setButtons(true); }
   }
+}
+
+function wireDroneV2PanelControls() {
+  const trainBtn = document.getElementById('v2-btn-train') as HTMLButtonElement | null;
+  const resetBtn = document.getElementById('v2-btn-reset-alpha') as HTMLButtonElement | null;
+  if (!trainBtn || !resetBtn || !controller) return;
+  const v2 = controller as any;
+
+  trainBtn.addEventListener('click', async () => {
+    if (isRunning) return;
+    const token = cancelToken;
+    isRunning = true;
+    setButtons(false);
+    trainBtn.disabled = true;
+    resetBtn.disabled = true;
+    const N_EPS = 10;
+    const nSteps = DEFAULT_STEPS[currentScenarioId] ?? 400;
+    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus(`Training ${N_EPS} episodes (α accumulating)...`);
+    try {
+      // Yield to the event loop so the status paints before the blocking run.
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      if (token !== cancelToken) return;
+      const out = callTrainEpisodes(pyodide, currentAgent, N_EPS, nSteps);
+      if (token !== cancelToken) return;
+      const scores = (out.summaries ?? []).map((s: any) => s.reward ?? 0);
+      if (typeof v2.appendTrainingScores === 'function') v2.appendTrainingScores(scores);
+      if (typeof v2.updateAlphaDisplay === 'function' && out.world_alpha) {
+        v2.updateAlphaDisplay(out.world_alpha);
+      }
+      const last10 = scores.slice(-10);
+      const avg = last10.length ? last10.reduce((a: number, b: number) => a + b, 0) / last10.length : 0;
+      if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus(`Trained ${N_EPS} eps. Last-10 mean score: ${avg.toFixed(2)}. α continues accumulating.`);
+      // Soft-reset the scene so the next Step starts from a fresh episode.
+      callReset(pyodide, currentAgent);
+      if (controller) { controller.reset(); }
+    } catch (e) {
+      console.error('Train failed:', e);
+      if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus('Training failed — see console.');
+    } finally {
+      if (token === cancelToken) {
+        isRunning = false;
+        setButtons(true);
+        trainBtn.disabled = false;
+        resetBtn.disabled = false;
+      }
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (isRunning) return;
+    callHardReset(pyodide, currentAgent);
+    if (controller) { controller.reset(); controller.resetPanel(); }
+    if (typeof v2.clearTrainingCurve === 'function') v2.clearTrainingCurve();
+    if (typeof v2.updateAlphaDisplay === 'function') v2.updateAlphaDisplay([1, 1, 1, 1]);
+    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus('α reset to uniform prior. Drone starts from scratch.');
+  });
 }
 
 function clearBenchmarkResults() {

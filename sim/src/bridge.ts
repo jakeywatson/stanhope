@@ -38,6 +38,7 @@ const SCENARIO_FILES = [
   'scenarios/tmaze.py',
   'scenarios/grid_maze.py',
   'scenarios/drone_search.py',
+  'scenarios/drone_search_v2.py',
 ];
 
 let benchmarkWorker: Worker | null = null;
@@ -175,6 +176,22 @@ export function callRunExperiment(pyodide: any, nTrials: number): any[] {
   const result = pyodide.runPython(
     `import json; json.dumps(runner.run_experiment(${nTrials}))`
   );
+  return JSON.parse(result);
+}
+
+/** Run N full episodes for the current scenario's agent, silently (no step animation).
+ *  Returns per-episode summaries plus the post-training world_alpha if available. */
+export function callTrainEpisodes(pyodide: any, agentType: string, nEpisodes: number, nSteps: number): any {
+  const result = pyodide.runPython(`
+import json
+summaries = []
+scen = runner.scenario
+for _ in range(${nEpisodes}):
+    scen.reset("${agentType}")
+    summaries.append(scen.run_episode_summary(${nSteps}))
+world_alpha = [float(v) for v in getattr(scen, 'world_alpha', [])]
+json.dumps({'summaries': summaries, 'world_alpha': world_alpha})
+`);
   return JSON.parse(result);
 }
 

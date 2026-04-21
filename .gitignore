@@ -27,3 +27,8 @@ chatgpt.md
 sim/findings.md
 sim/task_plan.md
 sim/progress.md
+sim/drone_v2_spec.md
+
+# Editor / tooling state
+.claude/
+.vscode/

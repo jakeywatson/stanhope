@@ -8,11 +8,13 @@ import numpy as np
 from scenarios.tmaze import TMazeScenario
 from scenarios.grid_maze import GridMazeScenario
 from scenarios.drone_search import DroneSearchScenario
+from scenarios.drone_search_v2 import DroneSearchV2Scenario
 
 SCENARIOS = {
     'tmaze': TMazeScenario,
     'grid_maze': GridMazeScenario,
     'drone_search': DroneSearchScenario,
+    'drone_search_v2': DroneSearchV2Scenario,
 }
 
 
@@ -280,6 +282,41 @@ class ScenarioRunner:
                     'denominator': 'success',
                 },
             ]
+        if self.current_name == 'drone_search_v2':
+            return [
+                {
+                    'key': 'tp',
+                    'label': 'True Positives',
+                    'short_label': 'TP',
+                    'format': 'number',
+                    'decimals': 2,
+                    'denominator': 'episodes',
+                },
+                {
+                    'key': 'fp',
+                    'label': 'False Positives',
+                    'short_label': 'FP',
+                    'format': 'number',
+                    'decimals': 2,
+                    'denominator': 'episodes',
+                },
+                {
+                    'key': 'fn',
+                    'label': 'Misses (FN)',
+                    'short_label': 'FN',
+                    'format': 'number',
+                    'decimals': 2,
+                    'denominator': 'episodes',
+                },
+                {
+                    'key': 'n_true_targets',
+                    'label': 'True Targets / Ep',
+                    'short_label': 'Tgts',
+                    'format': 'number',
+                    'decimals': 2,
+                    'denominator': 'episodes',
+                },
+            ]
         return []
 
     def get_config(self) -> dict:
@@ -290,6 +327,7 @@ class ScenarioRunner:
             {'id': 'tmaze', 'name': 'T-Maze (Paper)'},
             {'id': 'grid_maze', 'name': 'Room Search'},
             {'id': 'drone_search', 'name': 'Object Discrimination'},
+            {'id': 'drone_search_v2', 'name': 'Unknown Site Search'},
         ]
 
 

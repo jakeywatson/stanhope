@@ -610,22 +610,23 @@ In the sim: yes, qualitatively. The novelty term decays, coverage increases, pat
 
 ---
 
-# Extension 2 · drone search
+# Extension 2 · unknown site search
 
 <div class="grid grid-cols-2 gap-8 pt-4">
 
 <div>
 
-- 3D grid world with obstacles
-- Drone has a camera frustum — partial FoV
-- Targets hidden in occluded cells
-- Belief over (target-present, target-absent) per cell
+- 15×15 site, randomised each episode — **no map**
+- Buildings occlude line-of-sight (height-field raycasts)
+- 4-class cell belief: **empty · building · decoy · target**
+- Per-object target-vs-decoy belief
+- **Transferable Dirichlet prior** α — learnt *across* episodes
 
-**Policy**: where to fly *and* where to look
+**Policy**: where to fly · which altitude · when to commit
 
 <div class="pt-4 text-sm opacity-80">
 
-Salience term chooses viewpoints that *maximally reduce uncertainty* over target locations. This is essentially **next-best-view planning** with a free-energy objective.
+Salience picks viewpoints that reduce cell-class entropy — next-best-view. Novelty rewards cells whose class-prior α is still flat. Hit Train in the sim to watch α accumulate across silent episodes.
 
 </div>
 
@@ -634,9 +635,9 @@ Salience term chooses viewpoints that *maximally reduce uncertainty* over target
 
 **Why this matters**
 
-This is closer to what a perception-led autonomy system actually does. It reframes exploration as *information gathering under embodiment constraints* rather than as a schedule.
+The v2 world is an *unknown* environment, not a fixed POMDP. Every episode the layout resets but the agent retains Dirichlet counts over *what cell-types look like at this site*. That's the Stanhope-flavoured transferable prior in miniature — same variational objective, generative-model parameters persist.
 
-The caveat is honest: I built this as a didactic extension in a discrete world. The combinatorial blow-up from the prior slide is real — continuous motion + high-dim observations need amortised policy posteriors, not exhaustive EFE sums.
+Caveat still honest: discrete cells, tabular belief. A real system wants neural amortisation. But the structure — three-term EFE, digamma closed form — is unchanged.
 
 </div>
 </div>
@@ -647,7 +648,7 @@ The caveat is honest: I built this as a didactic extension in a discrete world. 
 
 <div class="text-sm opacity-80 pb-2">
 
-Toggle strips curiosity: $w_{\text{sal}} = w_{\text{nov}} = 0$ and collapses $\beta \to 0.125$ (greedy-precise). "If you only chased the extrinsic signal, how well would you do?"
+Toggle strips curiosity: $w_{\text{sal}} = w_{\text{nov}} = 0$ and collapses $\beta \to 0.125$ (greedy-precise). "If you only chased the extrinsic signal, how well would you do?" — 30 episodes per agent, 400-step cap, v2 unknown-site.
 
 </div>
 
@@ -656,55 +657,55 @@ Toggle strips curiosity: $w_{\text{sal}} = w_{\text{nov}} = 0$ and collapses $\b
 <div class="flex items-center gap-3">
   <div class="w-40">combined</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:88%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">88%</div>
+    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:83%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">83%</div>
   </div>
   <div class="w-6 text-center opacity-50">→</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:68%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">68%</div>
+    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:47%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">47%</div>
   </div>
-  <div class="w-20 text-rose-300 font-mono">−20pp</div>
+  <div class="w-20 text-rose-300 font-mono">−37pp</div>
 </div>
 
 <div class="flex items-center gap-3">
   <div class="w-40">active_inference</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:92%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">92%</div>
+    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:80%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">80%</div>
   </div>
   <div class="w-6 text-center opacity-50">→</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:66%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">66%</div>
+    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:47%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">47%</div>
   </div>
-  <div class="w-20 text-rose-300 font-mono">−26pp</div>
+  <div class="w-20 text-rose-300 font-mono">−33pp</div>
 </div>
 
 <div class="flex items-center gap-3">
   <div class="w-40">active_learning</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-emerald-500 rounded" style="width:89%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">89%</div>
+    <div class="absolute inset-y-0 left-0 bg-amber-600 rounded" style="width:27%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">27%</div>
   </div>
   <div class="w-6 text-center opacity-50">→</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-rose-500 rounded" style="width:57%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">57%</div>
+    <div class="absolute inset-y-0 left-0 bg-amber-400 rounded" style="width:47%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">47%</div>
   </div>
-  <div class="w-20 text-rose-300 font-mono">−32pp</div>
+  <div class="w-20 text-amber-300 font-mono">+20pp ⚠</div>
 </div>
 
 <div class="flex items-center gap-3 opacity-70">
   <div class="w-40">greedy <span class="text-xs opacity-60">(control)</span></div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:62%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">62%</div>
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:40%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">40%</div>
   </div>
   <div class="w-6 text-center opacity-50">≈</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:67%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">67%</div>
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:47%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">47%</div>
   </div>
   <div class="w-20 opacity-60 font-mono">≈ 0</div>
 </div>
@@ -712,13 +713,13 @@ Toggle strips curiosity: $w_{\text{sal}} = w_{\text{nov}} = 0$ and collapses $\b
 <div class="flex items-center gap-3 opacity-70">
   <div class="w-40">random <span class="text-xs opacity-60">(control)</span></div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:80%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">80%</div>
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:30%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">30%</div>
   </div>
   <div class="w-6 text-center opacity-50">≈</div>
   <div class="flex-1 h-5 bg-white/5 rounded relative">
-    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:85%"></div>
-    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">85%</div>
+    <div class="absolute inset-y-0 left-0 bg-slate-400 rounded" style="width:17%"></div>
+    <div class="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono">17%</div>
   </div>
   <div class="w-20 opacity-60 font-mono">≈ 0</div>
 </div>
@@ -728,16 +729,17 @@ Toggle strips curiosity: $w_{\text{sal}} = w_{\text{nov}} = 0$ and collapses $\b
 <div class="pt-4 grid grid-cols-12 gap-4 text-xs opacity-75">
 <div class="col-span-4"><b>Full EFE</b> · paper-matched weights</div>
 <div class="col-span-4 text-center"><b>Ablated</b> · extrinsic only, greedy β</div>
-<div class="col-span-4 text-right">target = confirm correct object (6 distractors)</div>
+<div class="col-span-4 text-right">15×15 unknown site · 30 eps/agent</div>
 </div>
 
 <div class="pt-3 text-sm opacity-85">
-Greedy / random are unchanged by the toggle — <b>control</b>: the switch isolates curiosity rather than just degrading policy. That random still scores 80% reveals the waypoint dispatcher itself encodes active-inference structure (Scan→z=2, Confirm→z=1, Explore→frontier). <b>Curiosity earns the last 10–30pp.</b>
+Every "smart" agent ablates to the same ~47% extrinsic-only baseline — which <i>is</i> the point: <b>curiosity is what distinguishes them</b>. Salience (AI) and salience+novelty (combined) buy 33–37pp above it. Active-learning (novelty-only) sits <i>below</i> — the counter-example that makes the lesson sharp: diffuse information-seeking, without salience's targeting, is worse than no seeking.
 </div>
 
 <!--
-Key number to anchor: 20–32pp drop for the three curiosity agents, flat for the two controls.
-If asked "why is AL's gap biggest?" — AL is novelty-only. Novelty calibrates the sensor model (disc_conc[z]); without it, the agent never validates that z=2 is the discriminating altitude. With small episode counts the variance is high — AL depends on iteratively-built sensor knowledge that never materialises under ablation.
+Headline: combined +37, AI +33 above a shared ablated baseline (~47%). AL inverts — novelty alone is worse than pure greedy exploitation.
+If asked why AL is worse: novelty rewards unvisited cells regardless of whether they matter for the task. Salience is what aims the information-gathering. Strip salience and novelty alone is a wandering signal; force greedy precision and you shut the wandering down, which helps.
+If asked why all three ablations land at identical 47%: once you zero w_sal and w_nov AND collapse β→0.125, the agents become the same extrinsic-only policy by construction. That's exactly what the toggle is meant to show.
 -->
 
 ---
@@ -748,34 +750,34 @@ If asked "why is AL's gap biggest?" — AL is novelty-only. Novelty calibrates t
 
 <div class="p-3 rounded-lg border-l-4 border-rose-400 bg-white/5">
 
-### combined · −20pp
-**Full EFE:** surveys, Scans top candidates twice at z=2, Confirms at z=1.
+### combined · −37pp
+**Full EFE:** surveys the site, inspects top candidates at altitude, commits on the most-target-like.
 
-**Ablated:** only signal is Confirm extrinsic ($-10$ until $p > 0.55$). Agent wanders until accidental sightings push a belief past threshold — sometimes commits to a distractor.
+**Ablated:** extrinsic-only + greedy β collapses to the shared baseline. No mechanism for deliberate information-gathering — commits are driven by passive sightings alone.
 
-<div class="pt-1.5 opacity-75">Cost of giving up deliberate information-gathering.</div>
+<div class="pt-1.5 opacity-75">Full cost of removing the two information-gathering terms.</div>
 
 </div>
 
 <div class="p-3 rounded-lg border-l-4 border-rose-400 bg-white/5">
 
-### active_inference · −26pp
+### active_inference · −33pp
 AI is **salience-only** — no novelty.
 
-Salience drives the Scan→Confirm two-step tailor-made for discrimination. Remove it → no mechanism that says *"go look closer at object X"*.
+Salience is doing most of the heavy lifting: it targets viewpoints at cells whose class is still uncertain. That's the term that earns nearly all of the combined agent's gain.
 
-<div class="pt-1.5 opacity-75">Single-component design brittles under ablation — combined's β-shaping gives it more to fall back on.</div>
+<div class="pt-1.5 opacity-75">Novelty adds cross-episode transfer, but per-episode salience carries most of the win.</div>
 
 </div>
 
-<div class="p-3 rounded-lg border-l-4 border-rose-400 bg-white/5">
+<div class="p-3 rounded-lg border-l-4 border-amber-400 bg-white/5">
 
-### active_learning · −32pp
-AL is **novelty-only** — no salience.
+### active_learning · **+20pp ⚠**
+AL is **novelty-only** — *worse* than its ablation.
 
-Novelty pushes altitude variation to sharpen `disc_conc[z]`. Without it the agent never validates which altitude discriminates.
+Novelty rewards unvisited cells regardless of task-relevance. Without salience's targeting, it's a wandering signal. Strip it and force greedy precision → agent commits to best passive sighting, which *helps*.
 
-<div class="pt-1.5 opacity-75">Depends on iteratively-built sensor knowledge that never materialises. Biggest loser in small-batch runs.</div>
+<div class="pt-1.5 opacity-75">Lesson: information-gain has to be <i>aimed</i>. Curiosity without direction is worse than none.</div>
 
 </div>
 
@@ -783,13 +785,13 @@ Novelty pushes altitude variation to sharpen `disc_conc[z]`. Without it the agen
 
 <div class="pt-4 text-sm">
 
-**One-liner.** A drone *with* curiosity surveys, inspects at the discriminating altitude, then commits. Strip curiosity and — even with greedy-precise exploitation — performance drops 20–32pp, because the agent has no mechanism to *seek* information, only to exploit what passive observation hands it.
+**One-liner.** Curiosity earns the full 37pp above the extrinsic baseline — but only when aimed. Salience is what aims it. Combined more than doubles greedy (83% vs 40%). That's what the three-term decomposition buys on an actual unknown environment.
 
 </div>
 
 <!--
-Ordering of agents here is intentional: combined → AI → AL, left-to-right, matches the bar chart on the prior slide and also the magnitude of the loss (20 → 26 → 32pp).
-If asked about the greedy/random controls: greedy already had w_sal=w_nov=0 and β=0.125, so the toggle is a no-op for it. Random uses β=8 and the toggle skips it. The ~5pp drift in each is RNG.
+Key asymmetry: salience does most of the work (AI alone ≈ combined). Novelty alone is actively harmful on v2 because the environment is random each episode — there's nothing structural for bare novelty to exploit without salience to say which cells *matter*.
+Controls reminder: greedy already had w_sal=w_nov=0 and β=0.125 by construction, so the toggle is a no-op. Random samples uniformly over actions; the toggle skips it. ±10pp RNG noise at 30 episodes.
 -->
 
 ---
