@@ -151,7 +151,12 @@ class MazeSimulation:
         })
         self._bayesian_update(obs, A_believed)
 
-        if target_loc in (LOC_LEFT, LOC_RIGHT):
+        # Only agents that *value* parameter learning (novelty-driven) commit
+        # observations to α. The paper's greedy and active-inference agents
+        # plan against a fixed model — tracking a posterior they don't consult
+        # would just muddy the leaderboard. This keeps the Fig 6 contrast
+        # crisp: without the novelty drive, there is no model learning.
+        if target_loc in (LOC_LEFT, LOC_RIGHT) and self.agent.w_novelty > 0:
             outcome_idx = None
             if obs == OBS_REWARD:
                 outcome_idx = 0
@@ -190,16 +195,29 @@ class MazeSimulation:
             self.state_belief = unnorm / total
 
     def _believed_A(self) -> ndarray:
-        """Return the observation model used for inference.
+        """Return the observation model the agent uses for planning.
 
-        The structural A (which arm is rewarding in which context) is known to
-        the agent — this matches the paper's hidden-state demo (Figs 7–9).
-        Dirichlet concentrations are tracked separately and only feed the
-        novelty (parameter info gain) term in the EFE — they reflect residual
-        uncertainty about reward reliability that the agent reduces by
-        sampling arms.
+        Following Schwartenbeck et al. (2019, Figs 5–6): the cue and location
+        likelihoods are known, but the agent has a flat Dirichlet prior over
+        arm reward reliabilities and must learn them from experience. We plug
+        the Dirichlet expectation into the REWARD/LOSS rows of A so that
+        extrinsic and salience are computed against the *learned* model —
+        novelty lives in the same α concentrations. Agents that never update α
+        (greedy, active_inference) plan forever as if reward_prob = 0.5,
+        which is what lets active learning pull ahead on this task.
         """
-        return self.model.A.copy()
+        A = self.model.A.copy()
+        for loc in (LOC_LEFT, LOC_RIGHT):
+            for ctx in range(N_CONTEXTS):
+                s = state_index(loc, ctx)
+                conc = self.a_conc[loc, ctx]
+                total = float(conc[0] + conc[1])
+                if total <= 0:
+                    continue
+                p_reward = float(conc[0]) / total
+                A[OBS_REWARD, s] = p_reward
+                A[OBS_LOSS, s] = 1.0 - p_reward
+        return A
 
     def _arm_summary(self, arm_loc: int) -> dict:
         """Expose a context-weighted arm summary for the UI belief bars."""
