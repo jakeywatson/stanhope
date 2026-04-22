@@ -6,12 +6,19 @@ that Pyodide can call via pyodide.runPython().
 import numpy as np
 
 from scenarios.tmaze import TMazeScenario
+from scenarios.tmaze_stable import TMazeStableScenario
+from scenarios.tmaze_learning import TMazeLearningScenario
 from scenarios.grid_maze import GridMazeScenario
 from scenarios.drone_search import DroneSearchScenario
 from scenarios.drone_search_v2 import DroneSearchV2Scenario
 
+# T-maze-family scenarios share the same summary/extra-metric/trial-curve logic.
+TMAZE_FAMILY = {'tmaze', 'tmaze_stable', 'tmaze_learning'}
+
 SCENARIOS = {
     'tmaze': TMazeScenario,
+    'tmaze_stable': TMazeStableScenario,
+    'tmaze_learning': TMazeLearningScenario,
     'grid_maze': GridMazeScenario,
     'drone_search': DroneSearchScenario,
     'drone_search_v2': DroneSearchV2Scenario,
@@ -103,8 +110,8 @@ class ScenarioRunner:
 
         accuracy_label = 'Success Rate'
         reward_label = 'Avg Reward'
-        if self.current_name == 'tmaze':
-            accuracy_label = 'Reward Rate'
+        if self.current_name in TMAZE_FAMILY:
+            accuracy_label = 'Big-Reward Rate'
             reward_label = 'Reward / Trial'
 
         # Snapshot original agent weights so the global AGENTS registry can be
@@ -117,6 +124,7 @@ class ScenarioRunner:
 
         try:
             agents = []
+            collect_trial_curves = self.current_name in TMAZE_FAMILY
             for agent_type in agent_types:
                 accuracy_sum = 0.0
                 reward_sum = 0.0
@@ -124,6 +132,14 @@ class ScenarioRunner:
                 success_sum = 0.0
                 failure_sum = 0.0
                 extra_sums = {metric['key']: 0.0 for metric in extra_metrics}
+                # Per-trial-index sums across the episodes in this batch.
+                # Aligned to n_steps — shorter episodes are padded with 0.
+                trial_curve_sums: dict[str, list[float]] = (
+                    {'cue_visit': [0.0] * n_steps,
+                     'risky_visit': [0.0] * n_steps,
+                     'big_hit': [0.0] * n_steps}
+                    if collect_trial_curves else {}
+                )
 
                 for episode_idx in range(max(1, episodes_per_agent)):
                     # Seed each agent's episode identically within the batch so the
@@ -160,8 +176,15 @@ class ScenarioRunner:
                     failure_sum += summary['failure']
                     for metric in extra_metrics:
                         extra_sums[metric['key']] += float(summary.get('extras', {}).get(metric['key'], 0.0))
+                    if collect_trial_curves:
+                        curves = summary.get('trial_curves', {}) or {}
+                        for key in trial_curve_sums:
+                            per_trial = curves.get(key, [])
+                            for t, v in enumerate(per_trial):
+                                if t < n_steps:
+                                    trial_curve_sums[key][t] += float(v)
 
-                agents.append({
+                agent_entry = {
                     'agent': agent_type,
                     'episodes': max(1, episodes_per_agent),
                     'accuracy_sum': accuracy_sum,
@@ -170,7 +193,40 @@ class ScenarioRunner:
                     'success_sum': success_sum,
                     'failure_sum': failure_sum,
                     'extra_sums': extra_sums,
-                })
+                }
+                if collect_trial_curves:
+                    agent_entry['trial_curve_sums'] = trial_curve_sums
+                agents.append(agent_entry)
+
+            trial_curve_specs: list[dict] = []
+            if self.current_name in TMAZE_FAMILY:
+                # Paper Fig 8C / Fig 6C — per-trial-index mean probability.
+                # Each spec names a metric the dashboard renders as its own
+                # chart. ``disabled_scenarios`` hides charts that are
+                # mechanically zero for a given variant (e.g. cue visits in
+                # the no-cue active-learning scenario).
+                trial_curve_specs = [
+                    {
+                        'key': 'cue_visit',
+                        'label': 'P(cue visit) by trial',
+                        'short_label': 'Cue',
+                        'disabled_scenarios': ['tmaze_learning'],
+                    },
+                    {
+                        'key': 'risky_visit',
+                        'label': 'P(risky visit) by trial',
+                        'short_label': 'Risky',
+                    },
+                    {
+                        'key': 'big_hit',
+                        'label': 'P(big reward) by trial',
+                        'short_label': 'Big',
+                    },
+                ]
+                trial_curve_specs = [
+                    spec for spec in trial_curve_specs
+                    if self.current_name not in spec.get('disabled_scenarios', [])
+                ]
 
             return {
                 'scenario': self.current_name,
@@ -179,6 +235,7 @@ class ScenarioRunner:
                 'reward_label': reward_label,
                 'step_cap': n_steps,
                 'extra_metrics': extra_metrics,
+                'trial_curves': trial_curve_specs,
                 'agents': agents,
             }
         finally:
@@ -190,7 +247,7 @@ class ScenarioRunner:
             np.random.set_state(next_rng_state)
 
     def _summarize_episode(self, results: list[dict]) -> dict:
-        if self.current_name == 'tmaze':
+        if self.current_name in TMAZE_FAMILY:
             if not results:
                 return {
                     'accuracy': 0.0,
@@ -199,19 +256,39 @@ class ScenarioRunner:
                     'success': 0.0,
                     'failure': 0.0,
                     'extras': {'cue_visit_rate': 0.0},
+                    'trial_curves': {'cue_visit': [], 'risky_visit': [], 'big_hit': []},
                 }
             rewards = [float(r.get('reward', 0.0)) for r in results]
-            rewarded = sum(1.0 for r in rewards if r > 0.0)
-            failed = sum(1.0 for r in rewards if r < 0.0)
             n_trials = len(rewards)
-            cue_visits = sum(1.0 for r in results if any(step.get('location') == 'cue' for step in r.get('trajectory', [])))
+
+            def final_obs(trial):
+                traj = trial.get('trajectory', [])
+                return traj[-1].get('observation', '') if traj else ''
+
+            def visited(trial, loc):
+                return 1 if any(step.get('location') == loc for step in trial.get('trajectory', [])) else 0
+
+            big_hits = sum(1.0 for r in results if final_obs(r) == 'big')
+            no_reward_hits = sum(1.0 for r in results if final_obs(r) == 'none')
+            cue_visits = sum(visited(r, 'cue') for r in results)
+            # Per-trial indicators — these drive the Fig 6C / Fig 8C-style
+            # time-course charts in the experimenter dashboard.
+            trial_curves = {
+                'cue_visit': [visited(r, 'cue') for r in results],
+                'risky_visit': [visited(r, 'right') for r in results],
+                'big_hit': [1 if final_obs(r) == 'big' else 0 for r in results],
+            }
             return {
-                'accuracy': rewarded / max(n_trials, 1),
+                # "Success" = big-reward rate. The safe arm pays out every time
+                # so counting any positive reward as success would collapse the
+                # leaderboard. Paper-faithful scoring scores risky wins only.
+                'accuracy': big_hits / max(n_trials, 1),
                 'reward': sum(rewards) / max(n_trials, 1),
                 'steps': float(n_trials),
-                'success': rewarded / max(n_trials, 1),
-                'failure': failed / max(n_trials, 1),
+                'success': big_hits / max(n_trials, 1),
+                'failure': no_reward_hits / max(n_trials, 1),
                 'extras': {'cue_visit_rate': cue_visits / max(n_trials, 1)},
+                'trial_curves': trial_curves,
             }
 
         if not results:
@@ -238,7 +315,11 @@ class ScenarioRunner:
         }
 
     def _extra_metric_specs(self) -> list[dict]:
-        if self.current_name == 'tmaze':
+        if self.current_name in TMAZE_FAMILY:
+            # In the no-cue learning variant the cue arm is disabled, so a
+            # cue-visit-rate metric would just be a flat-zero column.
+            if self.current_name == 'tmaze_learning':
+                return []
             return [
                 {
                     'key': 'cue_visit_rate',
@@ -337,7 +418,9 @@ class ScenarioRunner:
 
     def list_scenarios(self) -> list[dict]:
         return [
-            {'id': 'tmaze', 'name': 'T-Maze (Paper)'},
+            {'id': 'tmaze', 'name': 'T-Maze (Volatile Context)'},
+            {'id': 'tmaze_stable', 'name': 'T-Maze (Stable Context)'},
+            {'id': 'tmaze_learning', 'name': 'T-Maze (Active Learning — no cue)'},
             {'id': 'grid_maze', 'name': 'Room Search'},
             {'id': 'drone_search', 'name': 'Object Discrimination'},
             {'id': 'drone_search_v2', 'name': 'Unknown Site Search'},

@@ -36,6 +36,8 @@ const MODEL_FILES = [
 const SCENARIO_FILES = [
   'scenarios/__init__.py',
   'scenarios/tmaze.py',
+  'scenarios/tmaze_stable.py',
+  'scenarios/tmaze_learning.py',
   'scenarios/grid_maze.py',
   'scenarios/drone_search.py',
   'scenarios/drone_search_v2.py',

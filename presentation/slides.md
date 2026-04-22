@@ -480,6 +480,7 @@ Python (NumPy) model running in the browser via **Pyodide**. Same `.py` files ru
 - **Extrinsic · Salience · Novelty** → the three EFE weights $w_{\text{ext}}, w_{\text{sal}}, w_{\text{nov}}$
 - **Sensor model** panel → the Dirichlet concentrations $\boldsymbol{\alpha}$, updating live
 - Agent dropdown toggles the four regimes from the paper
+- Scenario dropdown switches between the paper's three T-maze tasks: volatile context, stable context, and no-cue active learning
 
 </div>
 
@@ -517,19 +518,30 @@ Demo points to hit live:
 
 ---
 
-# The key result · Figure 6
+# The key results · Figure 6 + Figure 8
 
 <div class="grid grid-cols-2 gap-8">
 
 <div>
 
-**What we should see**
+**Fig 6C — Active Learning (no cue)**
 
 <v-clicks>
 
-- Active-learning agent: probability of risky choice **decays** over trials as uncertainty resolves
-- Random-exploration agent: probability of risky choice is **flat** — no self-termination
-- Greedy agent: if initial estimate $\mathbb{E}[p]$ is low, never recovers — risky column is never revisited
+- AL & Combined: **P(risky) decays** as Dirichlet over $p$ concentrates
+- Random: flat — exploration not tied to learning
+- Greedy: stuck if initial $\mathbb{E}[p]$ low — risky column never revisited
+- Decay rate is closed-form in $\psi(\alpha_0)$
+
+</v-clicks>
+
+**Fig 8C — Active Inference (stable context)**
+
+<v-clicks>
+
+- AI & Combined: **P(cue visit)** collapses ~1.0 → ~0.1 over 32 trials
+- d-vector concentrates → salience info gain → 0 → cue-then-best loses to direct-arm
+- Volatile context (Fig 8A): cue usage stays flat — context resamples, cue always pays
 
 </v-clicks>
 
@@ -540,9 +552,9 @@ Demo points to hit live:
 
 <v-clicks>
 
-- Exploration collapses *from within the same objective* that drives exploitation
-- No separate exploration schedule (ε-greedy, entropy bonus) needed
-- The decay rate is a closed-form function of $\psi(\alpha_0)$ — you can compute when curiosity will "turn off"
+- Two separate exploratory behaviours — **parameter learning** (Fig 6) and **state-inference cueing** (Fig 8) — both self-terminate from the same $G$ objective
+- No exploration schedule, no $\varepsilon$-greedy, no entropy bonus
+- You can *compute* when each term switches off: novelty dies with $\psi(\alpha_0)$; salience dies with the d-vector entropy
 
 </v-clicks>
 
@@ -550,8 +562,8 @@ Demo points to hit live:
 
 </div>
 
-<div v-click class="pt-8 text-center text-lg opacity-90">
-This is the paper's strongest claim — and it replicates.
+<div v-click class="pt-6 text-center text-lg opacity-90">
+The sim has three T-maze variants — one per task in the paper — and reproduces both shapes.
 </div>
 
 ---

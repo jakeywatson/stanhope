@@ -14,6 +14,8 @@ const loading = document.getElementById('loading') as HTMLDivElement;
 // ─── Scenario registry ───
 const SCENE_MAP: Record<string, () => SceneController> = {
   tmaze: () => new TMazeScene(),
+  tmaze_stable: () => new TMazeScene(),
+  tmaze_learning: () => new TMazeScene(),
   grid_maze: () => new GridMazeScene(),
   drone_search: () => new DroneScene(),
   drone_search_v2: () => new DroneSceneV2(),
@@ -22,6 +24,20 @@ const SCENE_MAP: Record<string, () => SceneController> = {
 // ─── Agent type options per scenario ───
 const AGENTS: Record<string, { value: string; label: string }[]> = {
   tmaze: [
+    { value: 'active_learning', label: 'Active Learning' },
+    { value: 'active_inference', label: 'Active Inference' },
+    { value: 'combined', label: 'Combined' },
+    { value: 'greedy', label: 'Greedy' },
+    { value: 'random', label: 'Random' },
+  ],
+  tmaze_stable: [
+    { value: 'active_learning', label: 'Active Learning' },
+    { value: 'active_inference', label: 'Active Inference' },
+    { value: 'combined', label: 'Combined' },
+    { value: 'greedy', label: 'Greedy' },
+    { value: 'random', label: 'Random' },
+  ],
+  tmaze_learning: [
     { value: 'active_learning', label: 'Active Learning' },
     { value: 'active_inference', label: 'Active Inference' },
     { value: 'combined', label: 'Combined' },
@@ -53,6 +69,8 @@ const AGENTS: Record<string, { value: string; label: string }[]> = {
 
 const DEFAULT_STEPS: Record<string, number> = {
   tmaze: 32,
+  tmaze_stable: 32,
+  tmaze_learning: 32,
   grid_maze: 20,
   drone_search: 200,
   drone_search_v2: 400,
@@ -60,6 +78,8 @@ const DEFAULT_STEPS: Record<string, number> = {
 
 const DEFAULT_BENCHMARK_SETTINGS: Record<string, { episodesPerAgent: number; batchSize: number }> = {
   tmaze: { episodesPerAgent: 120, batchSize: 20 },
+  tmaze_stable: { episodesPerAgent: 120, batchSize: 20 },
+  tmaze_learning: { episodesPerAgent: 120, batchSize: 20 },
   grid_maze: { episodesPerAgent: 40, batchSize: 10 },
   drone_search: { episodesPerAgent: 40, batchSize: 10 },
   drone_search_v2: { episodesPerAgent: 30, batchSize: 5 },
@@ -155,8 +175,10 @@ function syncModelSliders() {
   document.getElementById('sv-rmag')!.textContent = '4.0';
 }
 
+const TMAZE_FAMILY = new Set(['tmaze', 'tmaze_stable', 'tmaze_learning']);
+
 function getBenchmarkModelParams(): BenchmarkModelParams | undefined {
-  if (currentScenarioId !== 'tmaze') return undefined;
+  if (!TMAZE_FAMILY.has(currentScenarioId)) return undefined;
 
   return {
     rewardProb: parseFloat((document.getElementById('sl-rprob') as HTMLInputElement).value),
@@ -362,8 +384,8 @@ function activateScenario(scenarioId: string, scenarioChanged = false) {
   if (scenarioChanged) {
     syncSlidersToAgent(currentAgent);
   }
-  showModelSliders(scenarioId === 'tmaze');
-  if (scenarioId === 'tmaze' && scenarioChanged) syncModelSliders();
+  showModelSliders(TMAZE_FAMILY.has(scenarioId));
+  if (TMAZE_FAMILY.has(scenarioId) && scenarioChanged) syncModelSliders();
 
   // Switch Python scenario
   const cfg = switchScenario(pyodide, scenarioId);
@@ -458,6 +480,7 @@ async function doRun() {
       await controller!.animateStep(result);
       if (token !== cancelToken) return;
       controller!.updatePanel(result);
+      updateRibbonFromResult(result);
       updateTrialCounter(result.trial ?? result.step ?? 0);
     }
   } finally {
@@ -477,6 +500,7 @@ async function doExperiment() {
       await controller!.animateStep(result);
       if (token !== cancelToken) return;
       controller!.updatePanel(result);
+      updateRibbonFromResult(result);
       updateTrialCounter(result.trial ?? result.step ?? 0);
     }
   } finally {

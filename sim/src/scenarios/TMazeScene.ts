@@ -157,7 +157,7 @@ export class TMazeScene implements SceneController {
           <div class="tc-eq">G(π) = <span class="tc-ext">Extrinsic value</span> + <span class="tc-sal">Salience</span> + <span class="tc-nov">Novelty</span></div>
           <p><span class="tc-label tc-ext">Extrinsic</span> — expected reward from choosing an arm</p>
           <p><span class="tc-label tc-sal">Salience</span> — information gain about which arm is rewarding (drives cue-seeking)</p>
-          <p><span class="tc-label tc-nov">Novelty</span> — parameter learning about reward/loss concentrations (Dirichlet α)</p>
+          <p><span class="tc-label tc-nov">Novelty</span> — parameter learning about the risky arm's big/none concentrations (Dirichlet α)</p>
           <p>Watch: the <em>Cue→Best</em> plan has high salience early on, driving the agent to inspect the cue and then replan with updated context beliefs.</p>
         </div>
       </details>
@@ -168,19 +168,18 @@ export class TMazeScene implements SceneController {
       <div class="panel-section">
         <h3>Hidden Context</h3>
         <div style="font-size:0.75rem;color:#8080a0;margin-bottom:0.4rem;">True: <span id="context-indicator">—</span></div>
-        <div class="belief-bar"><label>P(left good)</label><div class="bar-track"><div class="bar-fill fill-safe" id="bar-ctx-left" style="width:50%"></div></div><span class="bar-value" id="val-ctx-left">0.50</span></div>
-        <div class="belief-bar"><label>P(right good)</label><div class="bar-track"><div class="bar-fill fill-risky" id="bar-ctx-right" style="width:50%"></div></div><span class="bar-value" id="val-ctx-right">0.50</span></div>
+        <div class="belief-bar"><label>P(risky good)</label><div class="bar-track"><div class="bar-fill fill-safe" id="bar-ctx-left" style="width:50%"></div></div><span class="bar-value" id="val-ctx-left">0.50</span></div>
+        <div class="belief-bar"><label>P(risky bad)</label><div class="bar-track"><div class="bar-fill fill-risky" id="bar-ctx-right" style="width:50%"></div></div><span class="bar-value" id="val-ctx-right">0.50</span></div>
       </div>
       <div class="panel-section">
         <h3>Arm Beliefs (Dirichlet)</h3>
-        <div style="font-size:0.7rem;color:#22c55e;margin-bottom:0.25rem;">Left arm</div>
-        <div class="belief-bar"><label>P(reward)</label><div class="bar-track"><div class="bar-fill fill-safe" id="bar-left-p" style="width:50%"></div></div><span class="bar-value" id="val-left-p">0.50</span></div>
-        <div class="belief-bar"><label>α reward</label><div class="bar-track"><div class="bar-fill fill-novelty" id="bar-left-conc-r" style="width:10%"></div></div><span class="bar-value" id="val-left-conc-r">1.0</span></div>
-        <div class="belief-bar"><label>α loss</label><div class="bar-track"><div class="bar-fill fill-reward-none" id="bar-left-conc-l" style="width:10%"></div></div><span class="bar-value" id="val-left-conc-l">1.0</span></div>
-        <div style="font-size:0.7rem;color:#f59e0b;margin:0.4rem 0 0.25rem;">Right arm</div>
-        <div class="belief-bar"><label>P(reward)</label><div class="bar-track"><div class="bar-fill fill-risky" id="bar-right-p" style="width:50%"></div></div><span class="bar-value" id="val-right-p">0.50</span></div>
-        <div class="belief-bar"><label>α reward</label><div class="bar-track"><div class="bar-fill fill-novelty" id="bar-right-conc-r" style="width:10%"></div></div><span class="bar-value" id="val-right-conc-r">1.0</span></div>
-        <div class="belief-bar"><label>α loss</label><div class="bar-track"><div class="bar-fill fill-reward-none" id="bar-right-conc-l" style="width:10%"></div></div><span class="bar-value" id="val-right-conc-l">1.0</span></div>
+        <div style="font-size:0.7rem;color:#22c55e;margin-bottom:0.25rem;">Left arm (safe)</div>
+        <div class="belief-bar"><label>P(small)</label><div class="bar-track"><div class="bar-fill fill-safe" id="bar-left-p" style="width:100%"></div></div><span class="bar-value" id="val-left-p">1.00</span></div>
+        <div style="font-size:0.65rem;color:#666680;font-style:italic;margin:0.1rem 0 0.3rem;">deterministic — not learned</div>
+        <div style="font-size:0.7rem;color:#f59e0b;margin:0.4rem 0 0.25rem;">Right arm (risky)</div>
+        <div class="belief-bar"><label>P(big)</label><div class="bar-track"><div class="bar-fill fill-risky" id="bar-right-p" style="width:50%"></div></div><span class="bar-value" id="val-right-p">0.50</span></div>
+        <div class="belief-bar"><label>α big</label><div class="bar-track"><div class="bar-fill fill-novelty" id="bar-right-conc-r" style="width:10%"></div></div><span class="bar-value" id="val-right-conc-r">1.0</span></div>
+        <div class="belief-bar"><label>α none</label><div class="bar-track"><div class="bar-fill fill-reward-none" id="bar-right-conc-l" style="width:10%"></div></div><span class="bar-value" id="val-right-conc-l">1.0</span></div>
       </div>
       <div class="panel-section">
         <h3>Policy Probabilities</h3>
@@ -214,9 +213,9 @@ export class TMazeScene implements SceneController {
 
     // Context
     const ctx = el('context-indicator');
-    if (ctx) ctx.innerHTML = result.context === 'left_good'
-      ? '<span style="color:#22c55e">●</span> Left rewarding'
-      : '<span style="color:#f59e0b">●</span> Right rewarding';
+    if (ctx) ctx.innerHTML = result.context === 'risky_good'
+      ? '<span style="color:#f59e0b">●</span> Risky arm paying big'
+      : '<span style="color:#22c55e">●</span> Risky arm paying nothing';
 
     // Context belief
     setBar('bar-ctx-left', 'val-ctx-left', result.beliefs.context_belief[0]);
@@ -224,8 +223,6 @@ export class TMazeScene implements SceneController {
 
     // Arms
     setBar('bar-left-p', 'val-left-p', result.beliefs.left_arm.p_reward);
-    setConc('bar-left-conc-r', 'val-left-conc-r', result.beliefs.left_arm.conc_reward);
-    setConc('bar-left-conc-l', 'val-left-conc-l', result.beliefs.left_arm.conc_loss);
     setBar('bar-right-p', 'val-right-p', result.beliefs.right_arm.p_reward);
     setConc('bar-right-conc-r', 'val-right-conc-r', result.beliefs.right_arm.conc_reward);
     setConc('bar-right-conc-l', 'val-right-conc-l', result.beliefs.right_arm.conc_loss);
@@ -272,11 +269,9 @@ export class TMazeScene implements SceneController {
     this.rewardHistory = [];
     setBar('bar-ctx-left', 'val-ctx-left', 0.5);
     setBar('bar-ctx-right', 'val-ctx-right', 0.5);
-    setBar('bar-left-p', 'val-left-p', 0.5);
-    setBar('bar-right-p', 'val-right-p', 0.5);
-    setConc('bar-left-conc-r', 'val-left-conc-r', 1.0);
-    setConc('bar-left-conc-l', 'val-left-conc-l', 1.0);
-    setConc('bar-right-conc-r', 'val-right-conc-r', 1.0);
+    setBar('bar-left-p', 'val-left-p', 1.0);
+    setBar('bar-right-p', 'val-right-p', 0.8);
+    setConc('bar-right-conc-r', 'val-right-conc-r', 4.0);
     setConc('bar-right-conc-l', 'val-right-conc-l', 1.0);
     for (const p of POLICY_ORDER) {
       setEFE(`efe-${p}-ext`, 0);
@@ -437,8 +432,10 @@ export class TMazeScene implements SceneController {
 
   private flashReward(observation: string) {
     const viewport = document.getElementById('viewport')!;
-    const bg = observation === 'reward' ? 'rgba(139,92,246,0.15)'
-      : observation === 'loss' ? 'rgba(239,68,68,0.1)' : 'rgba(59,130,246,0.08)';
+    const bg = observation === 'big' ? 'rgba(139,92,246,0.20)'
+      : observation === 'small' ? 'rgba(34,197,94,0.15)'
+      : observation === 'none' ? 'rgba(239,68,68,0.10)'
+      : 'rgba(59,130,246,0.08)';
     const flash = document.createElement('div');
     flash.style.cssText = `position:absolute;inset:0;pointer-events:none;background:${bg};transition:opacity 0.5s;`;
     viewport.appendChild(flash);

@@ -113,21 +113,19 @@ function updateUI(result: StepResult) {
   // Hidden context indicator
   const ctxEl = document.getElementById('context-indicator') as HTMLElement;
   if (ctxEl) {
-    ctxEl.innerHTML = result.context === 'left_good'
-      ? '<span style="color:#22c55e">&#9679;</span> Left rewarding'
-      : '<span style="color:#f59e0b">&#9679;</span> Right rewarding';
+    ctxEl.innerHTML = result.context === 'risky_good'
+      ? '<span style="color:#f59e0b">&#9679;</span> Risky arm paying big'
+      : '<span style="color:#22c55e">&#9679;</span> Risky arm paying nothing';
   }
 
   // Context belief
   setBar('bar-ctx-left', 'val-ctx-left', result.beliefs.context_belief[0]);
   setBar('bar-ctx-right', 'val-ctx-right', result.beliefs.context_belief[1]);
 
-  // Left arm
+  // Left arm (safe — deterministic, not learned)
   setBar('bar-left-p', 'val-left-p', result.beliefs.left_arm.p_reward);
-  setConc('bar-left-conc-r', 'val-left-conc-r', result.beliefs.left_arm.conc_reward);
-  setConc('bar-left-conc-l', 'val-left-conc-l', result.beliefs.left_arm.conc_loss);
 
-  // Right arm
+  // Right arm (risky — learned Dirichlet)
   setBar('bar-right-p', 'val-right-p', result.beliefs.right_arm.p_reward);
   setConc('bar-right-conc-r', 'val-right-conc-r', result.beliefs.right_arm.conc_reward);
   setConc('bar-right-conc-l', 'val-right-conc-l', result.beliefs.right_arm.conc_loss);
@@ -187,11 +185,9 @@ function setEFE(id: string, value: number) {
 function resetUI() {
   setBar('bar-ctx-left', 'val-ctx-left', 0.5);
   setBar('bar-ctx-right', 'val-ctx-right', 0.5);
-  setBar('bar-left-p', 'val-left-p', 0.5);
-  setBar('bar-right-p', 'val-right-p', 0.5);
-  setConc('bar-left-conc-r', 'val-left-conc-r', 1.0);
-  setConc('bar-left-conc-l', 'val-left-conc-l', 1.0);
-  setConc('bar-right-conc-r', 'val-right-conc-r', 1.0);
+  setBar('bar-left-p', 'val-left-p', 1.0);
+  setBar('bar-right-p', 'val-right-p', 0.8);
+  setConc('bar-right-conc-r', 'val-right-conc-r', 4.0);
   setConc('bar-right-conc-l', 'val-right-conc-l', 1.0);
   for (const pName of POLICY_ORDER) {
     setEFE(`efe-${pName}-ext`, 0);
@@ -264,11 +260,13 @@ function drawRewardChart() {
 function flashReward(observation: string) {
   const viewport = document.getElementById('viewport') as HTMLDivElement;
   const flash = document.createElement('div');
-  const bg = observation === 'reward'
-    ? 'rgba(139,92,246,0.15)'
-    : observation === 'loss'
-      ? 'rgba(239,68,68,0.1)'
-      : 'rgba(59,130,246,0.08)';
+  const bg = observation === 'big'
+    ? 'rgba(139,92,246,0.20)'
+    : observation === 'small'
+      ? 'rgba(34,197,94,0.15)'
+      : observation === 'none'
+        ? 'rgba(239,68,68,0.10)'
+        : 'rgba(59,130,246,0.08)';
   flash.style.cssText = `position:absolute;inset:0;pointer-events:none;background:${bg};transition:opacity 0.5s;`;
   viewport.appendChild(flash);
   setTimeout(() => { flash.style.opacity = '0'; }, 50);

@@ -9,6 +9,7 @@ type BatchAgent = {
   success_sum: number;
   failure_sum: number;
   extra_sums?: Record<string, number>;
+  trial_curve_sums?: Record<string, number[]>;
 };
 
 type ExtraMetricSpec = {
@@ -18,6 +19,12 @@ type ExtraMetricSpec = {
   format?: 'number' | 'percent';
   decimals?: number;
   denominator?: 'episodes' | 'success';
+};
+
+type TrialCurveSpec = {
+  key: string;
+  label: string;
+  short_label?: string;
 };
 
 type ExperimentDefaults = {
@@ -33,6 +40,7 @@ type BatchResult = {
   reward_label: string;
   step_cap: number;
   extra_metrics?: ExtraMetricSpec[];
+  trial_curves?: TrialCurveSpec[];
   agents: BatchAgent[];
 };
 
@@ -47,6 +55,7 @@ type AgentTotals = {
   accuracyHistory: number[];
   rewardHistory: number[];
   extraHistories: Record<string, number[]>;
+  trialCurveSums: Record<string, number[]>;
 };
 
 const AGENT_COLORS: Record<string, string> = {
@@ -65,6 +74,8 @@ export class ExperimentDashboard {
   private accuracyLabel = 'Accuracy';
   private rewardLabel = 'Avg Reward';
   private extraMetrics: ExtraMetricSpec[] = [];
+  private trialCurves: TrialCurveSpec[] = [];
+  private trialCurveLength = 0;
   private totals = new Map<string, AgentTotals>();
 
   constructor(
@@ -173,6 +184,8 @@ export class ExperimentDashboard {
 
   resetResults(): void {
     this.extraMetrics = [];
+    this.trialCurves = [];
+    this.trialCurveLength = 0;
     this.totals.clear();
     for (const agent of this.agents) {
       this.totals.set(agent.value, {
@@ -186,6 +199,7 @@ export class ExperimentDashboard {
         accuracyHistory: [],
         rewardHistory: [],
         extraHistories: {},
+        trialCurveSums: {},
       });
     }
     this.render();
@@ -199,6 +213,10 @@ export class ExperimentDashboard {
     this.accuracyLabel = batch.accuracy_label;
     this.rewardLabel = batch.reward_label;
     this.extraMetrics = batch.extra_metrics ?? [];
+    this.trialCurves = batch.trial_curves ?? [];
+    if (this.trialCurves.length > 0) {
+      this.trialCurveLength = batch.step_cap;
+    }
     for (const agentBatch of batch.agents) {
       const state = this.totals.get(agentBatch.agent);
       if (!state) continue;
@@ -213,6 +231,17 @@ export class ExperimentDashboard {
         const history = state.extraHistories[metric.key] ?? [];
         history.push(this.computeExtraMetricValue(metric, state));
         state.extraHistories[metric.key] = history;
+      }
+      for (const spec of this.trialCurves) {
+        const incoming = agentBatch.trial_curve_sums?.[spec.key] ?? [];
+        const sums = state.trialCurveSums[spec.key] ?? new Array(this.trialCurveLength).fill(0);
+        if (sums.length < this.trialCurveLength) {
+          while (sums.length < this.trialCurveLength) sums.push(0);
+        }
+        for (let i = 0; i < incoming.length && i < sums.length; i++) {
+          sums[i] += incoming[i];
+        }
+        state.trialCurveSums[spec.key] = sums;
       }
       state.accuracyHistory.push(state.accuracySum / state.episodes);
       state.rewardHistory.push(state.rewardSum / state.episodes);
@@ -253,16 +282,33 @@ export class ExperimentDashboard {
       })),
     ];
 
-    this.chartGridEl.innerHTML = chartDefs.map(def => `
-      <div class="exp-card">
-        <h3>${def.title}</h3>
-        <canvas id="exp-chart-${def.id}"></canvas>
-      </div>
-    `).join('');
+    const trialCurveCards = this.trialCurves.map(spec => ({
+      id: `trial-${spec.key}`,
+      title: spec.label,
+    }));
+
+    this.chartGridEl.innerHTML = [
+      ...chartDefs.map(def => `
+        <div class="exp-card">
+          <h3>${def.title}</h3>
+          <canvas id="exp-chart-${def.id}"></canvas>
+        </div>
+      `),
+      ...trialCurveCards.map(def => `
+        <div class="exp-card">
+          <h3>${def.title}</h3>
+          <canvas id="exp-chart-${def.id}"></canvas>
+        </div>
+      `),
+    ].join('');
 
     for (const def of chartDefs) {
       const canvas = document.getElementById(`exp-chart-${def.id}`) as HTMLCanvasElement | null;
       this.drawLineChart(canvas, def.title, def.historySelector, def.formatter);
+    }
+    for (const spec of this.trialCurves) {
+      const canvas = document.getElementById(`exp-chart-trial-${spec.key}`) as HTMLCanvasElement | null;
+      this.drawTrialCurveChart(canvas, spec);
     }
   }
 
@@ -319,6 +365,80 @@ export class ExperimentDashboard {
       return state.successSum > 0 ? numerator / state.successSum : 0;
     }
     return state.episodes > 0 ? numerator / state.episodes : 0;
+  }
+
+  private drawTrialCurveChart(canvas: HTMLCanvasElement | null, spec: TrialCurveSpec): void {
+    if (!canvas) return;
+    const card = canvas.parentElement as HTMLDivElement | null;
+    const titleEl = card?.querySelector('h3');
+    if (titleEl) titleEl.textContent = spec.label;
+    const width = Math.max(card?.clientWidth ?? 320, 320);
+    const height = 220;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, width, height);
+
+    const paddingLeft = 46;
+    const paddingRight = 14;
+    const paddingTop = 20;
+    const paddingBottom = 28;
+    const chartW = width - paddingLeft - paddingRight;
+    const chartH = height - paddingTop - paddingBottom;
+
+    ctx.strokeStyle = '#1f2340';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = paddingTop + (chartH * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(paddingLeft, y);
+      ctx.lineTo(width - paddingRight, y);
+      ctx.stroke();
+    }
+
+    const n = this.trialCurveLength;
+    const minVal = 0;
+    const maxVal = 1;
+
+    ctx.fillStyle = '#606080';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('1.0', paddingLeft - 6, paddingTop + 4);
+    ctx.fillText('0.0', paddingLeft - 6, paddingTop + chartH + 4);
+    ctx.textAlign = 'center';
+    ctx.fillText('Trial', paddingLeft + chartW / 2, height - 8);
+
+    for (const agent of this.agents) {
+      const state = this.totals.get(agent.value)!;
+      const sums = state.trialCurveSums[spec.key];
+      if (!sums || state.episodes <= 0 || n <= 0) continue;
+      ctx.strokeStyle = AGENT_COLORS[agent.value] ?? '#8080a0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let t = 0; t < n; t++) {
+        const value = (sums[t] ?? 0) / state.episodes;
+        const x = paddingLeft + (chartW * t) / Math.max(n - 1, 1);
+        const yNorm = (value - minVal) / Math.max(maxVal - minVal, 1e-6);
+        const y = paddingTop + chartH - yNorm * chartH;
+        if (t === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Compact legend
+    let legendX = paddingLeft;
+    const legendY = 10;
+    ctx.textAlign = 'left';
+    for (const agent of this.agents) {
+      ctx.fillStyle = AGENT_COLORS[agent.value] ?? '#8080a0';
+      ctx.fillRect(legendX, legendY - 7, 10, 10);
+      ctx.fillStyle = '#a0a0c0';
+      ctx.font = '10px Inter, sans-serif';
+      ctx.fillText(agent.label, legendX + 14, legendY + 1);
+      legendX += 86;
+    }
   }
 
   private drawLineChart(
