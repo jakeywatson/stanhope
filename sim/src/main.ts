@@ -1,4 +1,4 @@
-import { initPyodide, loadModel, listScenarios, switchScenario, callStep, callReset, callHardReset, callRunExperiment, callTrainEpisodes, callBenchmarkBatchAsync, cancelBenchmarkWorkerJobs, setParams, setModelParams } from './bridge';
+import { initPyodide, loadModel, listScenarios, switchScenario, callStep, callReset, callHardReset, callRunExperiment, callTrainOneEpisode, callBenchmarkBatchAsync, cancelBenchmarkWorkerJobs, setParams, setModelParams } from './bridge';
 import type { BenchmarkModelParams } from './bridge';
 import { ExperimentDashboard } from './ExperimentDashboard';
 import type { SceneController, SceneObjects } from './scenarios/types';
@@ -561,8 +561,9 @@ async function doBenchmark() {
 
 function wireDroneV2PanelControls() {
   const trainBtn = document.getElementById('v2-btn-train') as HTMLButtonElement | null;
-  const resetBtn = document.getElementById('v2-btn-reset-alpha') as HTMLButtonElement | null;
-  if (!trainBtn || !resetBtn || !controller) return;
+  const resetSceneBtn = document.getElementById('v2-btn-reset-scene') as HTMLButtonElement | null;
+  const resetModelBtn = document.getElementById('v2-btn-reset-alpha') as HTMLButtonElement | null;
+  if (!trainBtn || !resetSceneBtn || !resetModelBtn || !controller) return;
   const v2 = controller as any;
 
   trainBtn.addEventListener('click', async () => {
@@ -571,23 +572,33 @@ function wireDroneV2PanelControls() {
     isRunning = true;
     setButtons(false);
     trainBtn.disabled = true;
-    resetBtn.disabled = true;
+    resetSceneBtn.disabled = true;
+    resetModelBtn.disabled = true;
     const N_EPS = 10;
     const nSteps = DEFAULT_STEPS[currentScenarioId] ?? 400;
-    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus(`Training ${N_EPS} episodes (α accumulating)...`);
+    const scores: number[] = [];
+    let lastAlpha: number[] | undefined;
+    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus(`Training 0 / ${N_EPS} episodes...`);
+    if (typeof v2.setTrainProgress === 'function') v2.setTrainProgress(0, N_EPS);
     try {
-      // Yield to the event loop so the status paints before the blocking run.
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      if (token !== cancelToken) return;
-      const out = callTrainEpisodes(pyodide, currentAgent, N_EPS, nSteps);
-      if (token !== cancelToken) return;
-      const scores = (out.summaries ?? []).map((s: any) => s.reward ?? 0);
-      if (typeof v2.appendTrainingScores === 'function') v2.appendTrainingScores(scores);
-      if (typeof v2.updateAlphaDisplay === 'function' && out.world_alpha) {
-        v2.updateAlphaDisplay(out.world_alpha);
+      for (let i = 0; i < N_EPS; i++) {
+        if (token !== cancelToken) return;
+        // Yield so the progress bar, status, and prior chart have a chance to paint
+        // between episodes. One Pyodide call still blocks the main thread, but
+        // 10 short blocks feel far better than one long one.
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+        if (token !== cancelToken) return;
+        const out = await callTrainOneEpisode(pyodide, currentAgent, nSteps);
+        const reward = out?.summary?.reward ?? 0;
+        scores.push(reward);
+        if (out?.world_alpha?.length) lastAlpha = out.world_alpha;
+        if (typeof v2.appendTrainingScores === 'function') v2.appendTrainingScores([reward]);
+        if (typeof v2.updateAlphaDisplay === 'function' && lastAlpha) v2.updateAlphaDisplay(lastAlpha);
+        if (typeof v2.setTrainProgress === 'function') v2.setTrainProgress(i + 1, N_EPS);
+        if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus(`Training ${i + 1} / ${N_EPS} episodes — last score ${reward.toFixed(2)}`);
       }
       const last10 = scores.slice(-10);
-      const avg = last10.length ? last10.reduce((a: number, b: number) => a + b, 0) / last10.length : 0;
+      const avg = last10.length ? last10.reduce((a, b) => a + b, 0) / last10.length : 0;
       if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus(`Trained ${N_EPS} eps. Last-10 mean score: ${avg.toFixed(2)}. α continues accumulating.`);
       // Soft-reset the scene so the next Step starts from a fresh episode.
       callReset(pyodide, currentAgent);
@@ -596,22 +607,36 @@ function wireDroneV2PanelControls() {
       console.error('Train failed:', e);
       if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus('Training failed — see console.');
     } finally {
+      if (typeof v2.setTrainProgress === 'function') v2.setTrainProgress(0, 0);
       if (token === cancelToken) {
         isRunning = false;
         setButtons(true);
         trainBtn.disabled = false;
-        resetBtn.disabled = false;
+        resetSceneBtn.disabled = false;
+        resetModelBtn.disabled = false;
       }
     }
   });
 
-  resetBtn.addEventListener('click', () => {
+  resetSceneBtn.addEventListener('click', () => {
+    if (isRunning) return;
+    // Keep world_alpha — just draw a new episode.
+    callReset(pyodide, currentAgent);
+    if (controller) { controller.reset(); controller.resetPanel(); }
+    setRibbon(null, null);
+    updateTrialCounter(0);
+    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus('New site drawn. α preserved.');
+  });
+
+  resetModelBtn.addEventListener('click', () => {
     if (isRunning) return;
     callHardReset(pyodide, currentAgent);
     if (controller) { controller.reset(); controller.resetPanel(); }
+    setRibbon(null, null);
+    updateTrialCounter(0);
     if (typeof v2.clearTrainingCurve === 'function') v2.clearTrainingCurve();
     if (typeof v2.updateAlphaDisplay === 'function') v2.updateAlphaDisplay([1, 1, 1, 1]);
-    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus('α reset to uniform prior. Drone starts from scratch.');
+    if (typeof v2.setTrainStatus === 'function') v2.setTrainStatus('Model wiped — α reset to uniform prior.');
   });
 }
 

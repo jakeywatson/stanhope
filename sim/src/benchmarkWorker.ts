@@ -25,6 +25,7 @@ const SCENARIO_FILES = [
   'scenarios/tmaze.py',
   'scenarios/grid_maze.py',
   'scenarios/drone_search.py',
+  'scenarios/drone_search_v2.py',
 ];
 
 type BenchmarkModelParams = {

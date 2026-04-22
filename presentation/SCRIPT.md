@@ -25,6 +25,13 @@
 **5 · Figure 2 · A, B, c, d** (60s)
 - Discrete POMDP. Four pieces.
 - Only **one column of A** is uncertain — the rest is deterministic. Whole learning problem is that column.
+- A is matrix showing likelihood of observations given hidden states.
+- B is transitions between hidden states. 
+- C is prior expectations about observations - specifies agents preferences (reward structure).
+- D is prior expectations about initial states (always start in the middle).
+- γ is precision of policy selection — the lever for random vs directed exploration.
+
+
 
 **6 · A-matrix · Dirichlet** (75s)
 - Belief over risky column = Dir(α). α = [1,1] = max uncertainty.

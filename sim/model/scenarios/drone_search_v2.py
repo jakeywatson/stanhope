@@ -242,10 +242,14 @@ class DroneSearchV2Scenario:
         empty_mask = ~self.bldg_mask
         for obj_i, pick_idx in enumerate(picks):
             x, y = candidates[pick_idx]
+            # Belt-and-braces: candidates already excludes buildings, but an
+            # object sharing a cell with a building would be hidden by the mesh.
+            if self.bldg_mask[x, y]:
+                continue
             openness = self._count_neighbours(x, y, empty_mask)
             p_target = max(0.0, P_TARGET_BASE - P_TARGET_OPENNESS_PENALTY * openness)
             is_target = bool(np.random.rand() < p_target)
-            self.objects.append(ObjectState(idx=obj_i, x=int(x), y=int(y),
+            self.objects.append(ObjectState(idx=len(self.objects), x=int(x), y=int(y),
                                             is_target=is_target))
 
     @staticmethod
@@ -590,7 +594,11 @@ class DroneSearchV2Scenario:
     # ─── Step / actuation ───────────────────────────────────────────────────
 
     def _best_move_toward(self, wp: Waypoint) -> tuple[int, int, int] | None:
-        """Greedy one-cell step toward a target position."""
+        """Greedy one-cell step toward a target position.
+
+        Never flies into a building cell: if the intended lateral neighbour has
+        ground-truth height >= current altitude, the drone ascends first so the
+        animation never passes through geometry."""
         if wp.target is None and wp.obj_idx is None:
             return None
         if wp.target is not None:
@@ -601,13 +609,34 @@ class DroneSearchV2Scenario:
         dx, dy, dz = self.drone
         if (dx, dy, dz) == (tx, ty, tz):
             return None
-        # Step priority: altitude first (get to desired z), then x, then y.
+        # Pick a tentative lateral step first so we can check for occlusion.
+        lat = None
+        if dx != tx:
+            lat = (1 if tx > dx else -1, 0)
+        elif dy != ty:
+            lat = (0, 1 if ty > dy else -1)
+
+        # If the lateral neighbour is a building we'd collide with, ascend first.
+        if lat is not None:
+            nx, ny = dx + lat[0], dy + lat[1]
+            if 0 <= nx < self.grid_size and 0 <= ny < self.grid_size:
+                bh = int(self.bldg_height[nx, ny])
+                if bh >= dz and dz < MAX_Z:
+                    return (0, 0, 1)
+
+        # Altitude first if we still need to climb to the waypoint altitude.
+        if dz != tz and lat is None:
+            return (0, 0, 1 if tz > dz else -1)
+        # If descending but a lateral neighbour still blocks, defer descent.
+        if dz != tz and lat is not None:
+            nx, ny = dx + lat[0], dy + lat[1]
+            bh = int(self.bldg_height[nx, ny]) if (0 <= nx < self.grid_size and 0 <= ny < self.grid_size) else 0
+            if tz < dz and bh >= (dz - 1):
+                return (lat[0], lat[1], 0)
+        if lat is not None:
+            return (lat[0], lat[1], 0)
         if dz != tz:
             return (0, 0, 1 if tz > dz else -1)
-        if dx != tx:
-            return (1 if tx > dx else -1, 0, 0)
-        if dy != ty:
-            return (0, 1 if ty > dy else -1, 0)
         return None
 
     def _resolve_object(self, obj_idx: int, action: str) -> float:

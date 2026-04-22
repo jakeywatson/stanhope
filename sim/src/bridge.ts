@@ -195,6 +195,15 @@ json.dumps({'summaries': summaries, 'world_alpha': world_alpha})
   return JSON.parse(result);
 }
 
+/** Run exactly one training episode. Safe to call repeatedly from the UI loop —
+ *  each call yields back control so a progress bar can paint. */
+export async function callTrainOneEpisode(pyodide: any, agentType: string, nSteps: number): Promise<any> {
+  const result = await pyodide.runPythonAsync(
+    `import json; json.dumps(runner.train_one_episode("${agentType}", ${nSteps}))`,
+  );
+  return JSON.parse(result);
+}
+
 export function callBenchmarkBatch(pyodide: any, nSteps: number, episodesPerAgent: number, agentTypes: string[]): any {
   const agentTypesJson = JSON.stringify(agentTypes)
     .replace(/\\/g, '\\\\')

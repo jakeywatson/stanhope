@@ -72,6 +72,19 @@ class ScenarioRunner:
     def run_experiment(self, n_steps: int = 32) -> list[dict]:
         return self.scenario.run_experiment(n_steps)
 
+    def train_one_episode(self, agent_type: str, n_steps: int) -> dict:
+        """Run a single fresh episode for training mode. Preserves any
+        cross-episode learned priors (e.g. world_alpha on drone_search_v2).
+        Returns the summary and current learned state."""
+        self.scenario.reset(agent_type)
+        if hasattr(self.scenario, 'run_episode_summary'):
+            summary = self.scenario.run_episode_summary(n_steps)
+        else:
+            results = self.scenario.run_experiment(n_steps)
+            summary = self._summarize_episode(results)
+        world_alpha = [float(v) for v in getattr(self.scenario, 'world_alpha', [])]
+        return {'summary': summary, 'world_alpha': world_alpha}
+
     def benchmark_batch(self, n_steps: int = 32, episodes_per_agent: int = 1, agent_types: list[str] | None = None, force_extrinsic_only: bool = False) -> dict:
         """Run a batch of fresh episodes for each agent and return aggregate metrics.
 

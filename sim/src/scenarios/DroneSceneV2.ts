@@ -186,14 +186,20 @@ export class DroneSceneV2 implements SceneController {
       <div class="panel-section">
         <h3>Learned Cell-Class Prior (α)</h3>
         <div id="v2-alpha"></div>
-        <div style="display:flex;gap:0.4rem;margin-top:0.5rem;">
-          <button id="v2-btn-train" style="flex:1;background:#1a1a35;color:#d8d8ee;border:1px solid #2a2a4a;padding:0.35rem 0.5rem;border-radius:4px;font-size:0.7rem;cursor:pointer;font-family:inherit;">Train 10 eps</button>
-          <button id="v2-btn-reset-alpha" style="flex:1;background:#1a1a35;color:#d8d8ee;border:1px solid #2a2a4a;padding:0.35rem 0.5rem;border-radius:4px;font-size:0.7rem;cursor:pointer;font-family:inherit;">Reset α</button>
+        <div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">
+          <button id="v2-btn-train" style="flex:1 1 100%;background:#1a1a35;color:#d8d8ee;border:1px solid #2a2a4a;padding:0.35rem 0.5rem;border-radius:4px;font-size:0.7rem;cursor:pointer;font-family:inherit;">Train 10 eps</button>
+          <button id="v2-btn-reset-scene" style="flex:1;background:#1a1a35;color:#d8d8ee;border:1px solid #2a2a4a;padding:0.35rem 0.5rem;border-radius:4px;font-size:0.7rem;cursor:pointer;font-family:inherit;" title="New site, keep α">Reset Scene</button>
+          <button id="v2-btn-reset-alpha" style="flex:1;background:#1a1a35;color:#d8d8ee;border:1px solid #2a2a4a;padding:0.35rem 0.5rem;border-radius:4px;font-size:0.7rem;cursor:pointer;font-family:inherit;" title="Wipe α and scene">Reset Model</button>
+        </div>
+        <div id="v2-train-progress-wrap" style="display:none;margin-top:0.4rem;">
+          <div style="height:6px;background:#0a0a14;border-radius:3px;overflow:hidden;">
+            <div id="v2-train-progress-fill" style="height:100%;width:0%;background:#06b6d4;transition:width 0.15s;"></div>
+          </div>
         </div>
         <div id="v2-train-status" style="font-size:0.65rem;color:#606080;margin-top:0.4rem;line-height:1.5;">
           Carries across episodes. Drives the novelty term — observing new sites reduces this prior's entropy.
         </div>
-        <div id="v2-train-curve-container" style="height:70px;margin-top:0.5rem;"><canvas id="v2-train-curve"></canvas></div>
+        <div id="v2-train-curve-container" style="height:70px;margin-top:0.5rem;position:relative;"><canvas id="v2-train-curve"></canvas></div>
       </div>
 
       <div class="panel-section">
@@ -220,7 +226,7 @@ export class DroneSceneV2 implements SceneController {
 
       <div class="panel-section">
         <h3>Mission Score</h3>
-        <div id="v2-score-chart-container"><canvas id="v2-score-chart"></canvas></div>
+        <div id="v2-score-chart-container" style="height:100px;position:relative;"><canvas id="v2-score-chart" style="display:block;width:100%;height:100%;"></canvas></div>
       </div>
     `;
   }
@@ -385,13 +391,34 @@ export class DroneSceneV2 implements SceneController {
     if (el) el.textContent = msg;
   }
 
+  setTrainProgress(done: number, total: number): void {
+    const wrap = document.getElementById('v2-train-progress-wrap') as HTMLDivElement | null;
+    const fill = document.getElementById('v2-train-progress-fill') as HTMLDivElement | null;
+    if (!wrap || !fill) return;
+    if (total <= 0 || done >= total) {
+      wrap.style.display = 'none';
+      fill.style.width = '0%';
+      return;
+    }
+    wrap.style.display = 'block';
+    fill.style.width = `${Math.min(100, (done / total) * 100)}%`;
+  }
+
   private drawTrainingCurve(): void {
     const canvas = document.getElementById('v2-train-curve') as HTMLCanvasElement | null;
     const container = document.getElementById('v2-train-curve-container') as HTMLDivElement | null;
     if (!canvas || !container) return;
-    canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(cw * dpr);
+    canvas.height = Math.floor(ch * dpr);
+    canvas.style.width = `${cw}px`;
+    canvas.style.height = `${ch}px`;
     const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cw, ch);
     const h = this.trainingScores;
     if (!h.length) {
       ctx.fillStyle = '#505070';
@@ -400,16 +427,16 @@ export class DroneSceneV2 implements SceneController {
       return;
     }
     const pad = 6;
-    const pw = canvas.width - pad * 2;
-    const ph = canvas.height - pad * 2;
+    const pw = cw - pad * 2;
+    const ph = ch - pad * 2;
     const maxAbs = Math.max(2, ...h.map(Math.abs));
     ctx.strokeStyle = '#2a2a4a'; ctx.lineWidth = 1;
     const zeroY = pad + ph / 2;
     ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(pad + pw, zeroY); ctx.stroke();
     // running mean
-    const window = 5;
+    const smoothWindow = 5;
     const smoothed = h.map((_, i) => {
-      const lo = Math.max(0, i - window + 1);
+      const lo = Math.max(0, i - smoothWindow + 1);
       const slice = h.slice(lo, i + 1);
       return slice.reduce((a, b) => a + b, 0) / slice.length;
     });
@@ -741,12 +768,20 @@ function drawScoreChart(history: number[]) {
   const canvas = document.getElementById('v2-score-chart') as HTMLCanvasElement | null;
   const container = document.getElementById('v2-score-chart-container') as HTMLDivElement | null;
   if (!canvas || !container) return;
-  canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+  if (cw <= 0 || ch <= 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(cw * dpr);
+  canvas.height = Math.floor(ch * dpr);
+  canvas.style.width = `${cw}px`;
+  canvas.style.height = `${ch}px`;
   const ctx = canvas.getContext('2d')!;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
   if (history.length === 0) return;
   const maxAbs = Math.max(4, ...history.map(Math.abs));
-  const px = 30, py = 10, pw = canvas.width - px - 10, ph = canvas.height - py * 2;
+  const px = 30, py = 8, pw = cw - px - 10, ph = ch - py * 2;
   ctx.strokeStyle = '#2a2a4a'; ctx.lineWidth = 1;
   // zero line
   ctx.beginPath();
