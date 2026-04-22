@@ -487,16 +487,19 @@ class DroneSearchV2Scenario:
 
     def _efe_salience(self, wp: Waypoint) -> float:
         """Expected entropy reduction on in-episode beliefs (per-cell class and
-        per-object target) from the observations an action would produce."""
+        per-object target) from the observations an action would produce.
+
+        Uses a per-step precomputed (altitude, gx, gy) info-gain grid so each
+        waypoint is a sum-over-FOV rather than a per-cell NumPy call.
+        """
         if wp.wp_type == WP_EXPLORE:
             x, y, z = wp.target
-            a = SENSOR_ACCURACY[z]
-            wrong = wrong_class_mass(z)
+            info_plane = self._info_gain_grid[z - 1]
             total = 0.0
             for cx, cy in self._fov_cells(x, y, z):
                 if not self._has_los(x, y, z, cx, cy):
                     continue
-                total += self._cell_info_gain(self.belief[cx, cy], a, wrong)
+                total += float(info_plane[cx, cy])
             return SALIENCE_SCALE * total
         if wp.wp_type == WP_SCAN:
             obj = self.objects[wp.obj_idx]
@@ -515,57 +518,75 @@ class DroneSearchV2Scenario:
             else:
                 H_after_obj = H_cur
             obj_gain = max(0.0, H_cur - H_after_obj)
-            # Also pick up the per-cell info gain at the object's cell.
-            cell_gain = self._cell_info_gain(self.belief[obj.x, obj.y], a, wrong)
+            cell_gain = float(self._info_gain_grid[z - 1, obj.x, obj.y])
             return SALIENCE_SCALE * (obj_gain + cell_gain)
         return 0.0
 
-    def _cell_info_gain(self, p_c: np.ndarray, a: float, wrong: float) -> float:
-        """H[p(c)] − E_o[H[p(c|o)]] under the noisy-4-class sensor likelihood."""
-        H_cur = -(p_c * np.log(np.maximum(p_c, 1e-16))).sum()
-        H_after = 0.0
-        for o in range(N_CLASSES):
-            lik = np.full(N_CLASSES, wrong)
-            lik[o] = a
-            joint = p_c * lik
-            P_o = joint.sum()
-            if P_o < 1e-12:
-                continue
-            post = joint / P_o
-            H_o = -(post * np.log(np.maximum(post, 1e-16))).sum()
-            H_after += P_o * H_o
-        return max(0.0, float(H_cur - H_after))
+    def _precompute_efe_grids(self) -> None:
+        """Build per-altitude info-gain and novelty grids for the current belief.
+
+        Shape: (len(ALTITUDES), GRID, GRID). A single vectorised pass over the
+        whole grid replaces thousands of per-cell NumPy calls inside the
+        waypoint-evaluation loop.
+        """
+        belief = self.belief  # (G, G, N_CLASSES)
+        eps = 1e-16
+        log_b = np.log(np.maximum(belief, eps))
+        H_cur = -(belief * log_b).sum(axis=-1)  # (G, G)
+
+        alpha = self.world_alpha
+        inv_alpha = 1.0 / alpha
+        inv_a0 = 1.0 / alpha.sum()
+
+        n_alt = len(ALTITUDES)
+        info_grid = np.zeros((n_alt, belief.shape[0], belief.shape[1]))
+        novelty_grid = np.zeros_like(info_grid)
+
+        for zi, z in enumerate(ALTITUDES):
+            a = SENSOR_ACCURACY[z]
+            wrong = wrong_class_mass(z)
+
+            # Salience: expected entropy reduction on per-cell class belief.
+            H_after = np.zeros(belief.shape[:2])
+            for o in range(N_CLASSES):
+                lik = np.full(N_CLASSES, wrong)
+                lik[o] = a
+                joint = belief * lik                     # (G, G, 4)
+                P_o = joint.sum(axis=-1)                 # (G, G)
+                safe_P = np.maximum(P_o, eps)
+                post = joint / safe_P[..., None]
+                log_post = np.log(np.maximum(post, eps))
+                H_o = -(post * log_post).sum(axis=-1)
+                H_after += np.where(P_o < 1e-12, 0.0, P_o * H_o)
+            info_grid[zi] = np.maximum(0.0, H_cur - H_after)
+
+            # Novelty: quadratic-approx KL on world_alpha under predictive obs dist.
+            p_obs = belief * a + (1.0 - belief) * wrong  # (G, G, 4)
+            nov = 0.5 * a * a * ((p_obs * inv_alpha).sum(axis=-1) - inv_a0)
+            novelty_grid[zi] = np.maximum(0.0, nov)
+
+        self._info_gain_grid = info_grid
+        self._novelty_grid = novelty_grid
 
     def _efe_novelty(self, wp: Waypoint) -> float:
         """Expected KL on the transferable Dirichlet class prior from the
         observations this action would produce. Uses a quadratic approximation
-        valid for small pseudo-count increments: KL(α+δe_o || α) ≈ ½ δ²(1/α_o − 1/α_0)."""
-        alpha = self.world_alpha
-        a0 = alpha.sum()
-        inv_alpha = 1.0 / alpha
-        inv_a0 = 1.0 / a0
-
+        valid for small pseudo-count increments: KL(α+δe_o || α) ≈ ½ δ²(1/α_o − 1/α_0).
+        Per-cell values are precomputed in ``_precompute_efe_grids``.
+        """
         if wp.wp_type == WP_EXPLORE:
             x, y, z = wp.target
-            a = SENSOR_ACCURACY[z]
-            wrong = wrong_class_mass(z)
+            nov_plane = self._novelty_grid[z - 1]
             total = 0.0
             for cx, cy in self._fov_cells(x, y, z):
                 if not self._has_los(x, y, z, cx, cy):
                     continue
-                p_c = self.belief[cx, cy]
-                p_obs = p_c * a + (1 - p_c) * wrong  # predictive obs distribution
-                total += max(0.0, 0.5 * a * a * float((p_obs * inv_alpha).sum() - inv_a0))
+                total += float(nov_plane[cx, cy])
             return NOVELTY_SCALE * total
         if wp.wp_type == WP_SCAN:
             obj = self.objects[wp.obj_idx]
             z = wp.target[2]
-            a = SENSOR_ACCURACY[z]
-            wrong = wrong_class_mass(z)
-            p_c = self.belief[obj.x, obj.y]
-            p_obs = p_c * a + (1 - p_c) * wrong
-            contribution = 0.5 * a * a * float((p_obs * inv_alpha).sum() - inv_a0)
-            return NOVELTY_SCALE * max(0.0, contribution)
+            return NOVELTY_SCALE * float(self._novelty_grid[z - 1, obj.x, obj.y])
         return 0.0
 
     def _evaluate(self, wp: Waypoint) -> dict:
@@ -688,12 +709,15 @@ class DroneSearchV2Scenario:
             return self._result_dict(reward_this_step, include_details)
 
         wps = self._generate_waypoints()
-        evals = {wp.name: self._evaluate(wp) for wp in wps}
         if self.agent.force_uniform:
             # Random baseline — pick uniformly across available waypoints.
+            # No EFE evaluation needed; skip the expensive waypoint scoring.
+            evals = None
             best_wp = wps[np.random.randint(len(wps))]
             self.current_wp = best_wp
         else:
+            self._precompute_efe_grids()
+            evals = {wp.name: self._evaluate(wp) for wp in wps}
             # Pick argmax total; with ties, prefer lower distance.
             best_wp = max(wps, key=lambda w: (evals[w.name]['total'], -evals[w.name]['distance']))
             # Commitment: if we already have a waypoint, keep unless beaten by margin.

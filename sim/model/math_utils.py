@@ -5,6 +5,7 @@ and the digamma/gammaln functions needed for expected free energy.
 """
 import numpy as np
 from numpy import ndarray
+from scipy.special import gammaln as _gammaln, digamma as _digamma
 
 
 def softmax(x: ndarray) -> ndarray:
@@ -29,10 +30,9 @@ def dirichlet_entropy(alpha: ndarray) -> float:
     H[Dir(α)] = log B(α) + (α₀ - K)ψ(α₀) - Σ(α_i - 1)ψ(α_i)
     where α₀ = Σα_i, K = len(α), ψ = digamma.
     """
-    from scipy.special import gammaln, digamma as _digamma
     a0 = alpha.sum()
     K = len(alpha)
-    log_B = gammaln(alpha).sum() - gammaln(a0)
+    log_B = _gammaln(alpha).sum() - _gammaln(a0)
     return log_B + (a0 - K) * _digamma(a0) - ((alpha - 1) * _digamma(alpha)).sum()
 
 
@@ -41,10 +41,9 @@ def kl_dirichlet(alpha: ndarray, beta: ndarray) -> float:
 
     D_KL[Dir(α) || Dir(β)] = log[B(β)/B(α)] + Σ(α_i - β_i)[ψ(α_i) - ψ(α₀)]
     """
-    from scipy.special import gammaln, digamma as _digamma
     a0 = alpha.sum()
     b0 = beta.sum()
-    log_B_ratio = (gammaln(beta).sum() - gammaln(b0)) - (gammaln(alpha).sum() - gammaln(a0))
+    log_B_ratio = (_gammaln(beta).sum() - _gammaln(b0)) - (_gammaln(alpha).sum() - _gammaln(a0))
     return log_B_ratio + ((alpha - beta) * (_digamma(alpha) - _digamma(a0))).sum()
 
 

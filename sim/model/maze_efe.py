@@ -36,18 +36,22 @@ def evaluate_maze_policies(
     log_pref = log_stable(softmax(c))
     G = np.zeros(N_POLICIES)
     efe_details = {}
+    need_salience = w_salience > 0
+    need_novelty = w_novelty > 0
 
     for pi, policy_name in enumerate(POLICY_NAMES):
         if policy_name == POLICY_LEFT_DIRECT:
             efe = _with_total(
-                _one_step_efe(A, B, d, LOC_LEFT, a_conc, log_pref),
+                _one_step_efe(A, B, d, LOC_LEFT, a_conc, log_pref,
+                              need_salience, need_novelty),
                 w_extrinsic,
                 w_salience,
                 w_novelty,
             )
         elif policy_name == POLICY_RIGHT_DIRECT:
             efe = _with_total(
-                _one_step_efe(A, B, d, LOC_RIGHT, a_conc, log_pref),
+                _one_step_efe(A, B, d, LOC_RIGHT, a_conc, log_pref,
+                              need_salience, need_novelty),
                 w_extrinsic,
                 w_salience,
                 w_novelty,
@@ -89,14 +93,18 @@ def select_best_arm_target(
 ) -> tuple[int, dict]:
     """Choose the best arm after an observation has updated the belief state."""
     log_pref = log_stable(softmax(c))
+    need_salience = w_salience > 0
+    need_novelty = w_novelty > 0
     left = _with_total(
-        _one_step_efe(A, B, belief, LOC_LEFT, a_conc, log_pref),
+        _one_step_efe(A, B, belief, LOC_LEFT, a_conc, log_pref,
+                      need_salience, need_novelty),
         w_extrinsic,
         w_salience,
         w_novelty,
     )
     right = _with_total(
-        _one_step_efe(A, B, belief, LOC_RIGHT, a_conc, log_pref),
+        _one_step_efe(A, B, belief, LOC_RIGHT, a_conc, log_pref,
+                      need_salience, need_novelty),
         w_extrinsic,
         w_salience,
         w_novelty,
@@ -117,8 +125,15 @@ def _one_step_efe(
     target_loc: int,
     a_conc: ndarray | None,
     log_pref: ndarray,
+    need_salience: bool = True,
+    need_novelty: bool = True,
 ) -> dict:
-    """Compute one-step EFE components for moving to a specific location."""
+    """Compute one-step EFE components for moving to a specific location.
+
+    Salience and novelty are only computed when their EFE weight is non-zero —
+    the component consumes ~half the benchmark runtime for active-learning
+    agents, and greedy/random gain nothing by evaluating it.
+    """
     next_belief = B[:, :, target_loc] @ belief
     next_belief = _normalize(next_belief)
 
@@ -127,14 +142,16 @@ def _one_step_efe(
 
     extrinsic = float(predicted_obs @ log_pref)
 
-    ambiguity = 0.0
-    for state in range(N_STATES):
-        if next_belief[state] > 1e-16:
-            ambiguity += next_belief[state] * entropy(A[:, state])
-    salience = entropy(predicted_obs) - ambiguity
+    salience = 0.0
+    if need_salience:
+        ambiguity = 0.0
+        for state in range(N_STATES):
+            if next_belief[state] > 1e-16:
+                ambiguity += next_belief[state] * entropy(A[:, state])
+        salience = entropy(predicted_obs) - ambiguity
 
     novelty = 0.0
-    if a_conc is not None and target_loc in (LOC_LEFT, LOC_RIGHT):
+    if need_novelty and a_conc is not None and target_loc in (LOC_LEFT, LOC_RIGHT):
         arm_conc = a_conc[target_loc]
         if getattr(arm_conc, 'ndim', 1) == 1:
             novelty = _param_info_gain(arm_conc)
@@ -205,7 +222,10 @@ def _two_step_cue_efe(
     selecting the better arm under the updated belief, and weighting the
     follow-up EFE by the predicted observation probability.
     """
-    step1 = _one_step_efe(A, B, belief, LOC_CUE, a_conc, log_pref)
+    need_salience = w_salience > 0
+    need_novelty = w_novelty > 0
+    step1 = _one_step_efe(A, B, belief, LOC_CUE, a_conc, log_pref,
+                          need_salience, need_novelty)
 
     predicted_obs = step1['predicted_obs']
     cue_belief = step1['next_belief']
@@ -228,8 +248,10 @@ def _two_step_cue_efe(
             continue
         post_belief = unnorm / total
 
-        left = _one_step_efe(A, B, post_belief, LOC_LEFT, a_conc, log_pref)
-        right = _one_step_efe(A, B, post_belief, LOC_RIGHT, a_conc, log_pref)
+        left = _one_step_efe(A, B, post_belief, LOC_LEFT, a_conc, log_pref,
+                             need_salience, need_novelty)
+        right = _one_step_efe(A, B, post_belief, LOC_RIGHT, a_conc, log_pref,
+                              need_salience, need_novelty)
         left_total = _with_total(left, w_extrinsic, w_salience, w_novelty)['total']
         right_total = _with_total(right, w_extrinsic, w_salience, w_novelty)['total']
         chosen = right if right_total > left_total else left
